@@ -15,6 +15,7 @@ use gpui_kit::{
     App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Render, SharedString,
     Styled as _, Subscription, TestSupportExt as _, Window, actions, div,
+    prelude::FluentBuilder as _,
 };
 use sett_store::{Board, Date, ItemId, Space, same_label};
 
@@ -399,6 +400,10 @@ impl Render for TaskView {
         let editor = self.editor.read(cx);
         let (title, locked) = (editor.title_input().clone(), editor.locked());
         let view = cx.entity().downgrade();
+        let has_labels = self
+            .shown
+            .as_ref()
+            .is_some_and(|shown| !shown.labels.is_empty());
         v_flex()
             .id("task-view")
             .test_support()
@@ -450,6 +455,9 @@ impl Render for TaskView {
                                 div().id("task-labels").test_support().child(
                                     Combobox::new(&self.labels)
                                         .small()
+                                        // The small input's fixed height would let wrapped
+                                        // Labels spill over the rows below; grow instead.
+                                        .when(has_labels, |field| field.h_auto())
                                         .placeholder("Add a label")
                                         .search_placeholder("Find or add a label")
                                         .disabled(locked)
