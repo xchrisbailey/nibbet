@@ -3690,7 +3690,6 @@ fn d20_caret_x_follows_cell_alignment(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-#[ignore = "fails on main: https://github.com/xchrisbailey/sett/issues/99"]
 fn d20_clicks_in_aligned_cells_land_where_the_text_is(cx: &mut TestAppContext) {
     let (editor, cx) = open(cx, ALIGNED);
     // Click just right of the "42" text: caret after "42" in that cell.
@@ -3779,7 +3778,6 @@ fn assert_grips_match_cells(editor: &Entity<BlockEditorState>, cx: &VisualTestCo
 }
 
 #[gpui::test]
-#[ignore = "fails on main: https://github.com/xchrisbailey/sett/issues/99"]
 fn d20_grips_and_hits_match_cells_for_aligned_uneven_wrapped_tables(cx: &mut TestAppContext) {
     let (editor, cx) = open(cx, ALIGNED);
     assert_grips_match_cells(&editor, cx, "aligned + wrapped");
@@ -3824,7 +3822,6 @@ impl Render for Resizable {
 }
 
 #[gpui::test]
-#[ignore = "fails on main: https://github.com/xchrisbailey/sett/issues/99"]
 fn d20_grips_follow_resize_and_scroll(cx: &mut TestAppContext) {
     cx.update(crate::init_for_tests);
     let source = format!(
