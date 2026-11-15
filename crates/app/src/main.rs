@@ -57,6 +57,13 @@ fn main() {
             }
         };
 
+        // Before the window opens, so the Shell's first sync already sees it.
+        match arg_after("--appearance").as_deref() {
+            Some("light") => cx.set_window_appearance(Some(WindowAppearance::Light)),
+            Some("dark") => cx.set_window_appearance(Some(WindowAppearance::Dark)),
+            Some(other) => eprintln!("sett: --appearance {other}: not light or dark"),
+            None => {}
+        }
         let bounds = Bounds::centered(None, size(px(1024.), px(720.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -98,7 +105,8 @@ fn main() {
 
 /// The value after `flag` on the command line. `scripts/screenshot` passes
 /// `--open SLUG` (an Item, or a Template with `--screen templates`) and
-/// `--screen journal|notes|templates` to choose what the window shows.
+/// `--screen journal|notes|templates` to choose what the window shows, and
+/// `--appearance light|dark` to override the system's appearance.
 fn arg_after(flag: &str) -> Option<String> {
     let mut args = std::env::args().skip_while(|arg| arg != flag);
     args.next()?;

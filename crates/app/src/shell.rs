@@ -1,5 +1,5 @@
 use gpui_kit::component::tab::{Tab, TabBar};
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, TitleBar, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, Theme, TitleBar, h_flex, v_flex};
 use gpui_kit::{
     App, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
     KeyBinding, MouseButton, ParentElement as _, Render, Styled as _, Subscription, Window,
@@ -53,10 +53,17 @@ pub struct Shell {
     center: Entity<CenterPanel>,
     focus_handle: FocusHandle,
     _observe: Subscription,
+    _appearance: Subscription,
 }
 
 impl Shell {
     pub fn new(model: Entity<AppModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        // gpui-kit's init starts in Light whatever the system says, so match
+        // the system before any child reads it, and whenever it switches.
+        Theme::sync_system_appearance(Some(window), cx);
+        let appearance = cx.observe_window_appearance(window, |_, window, cx| {
+            Theme::sync_system_appearance(Some(window), cx)
+        });
         let center = cx.new(|cx| CenterPanel::new(model.clone(), window, cx));
         let observe = cx.observe(&model, |_, _, cx| cx.notify());
         let history = model.clone();
@@ -76,6 +83,7 @@ impl Shell {
             center,
             focus_handle,
             _observe: observe,
+            _appearance: appearance,
         }
     }
 

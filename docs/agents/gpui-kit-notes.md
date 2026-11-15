@@ -11,6 +11,7 @@ Imports: `use gpui_kit::*;` gives GPUI. `gpui_kit::component` re-exports `h_flex
 - **Project icons:** a curated set in `crates/app/src/icons.rs`, embedded through `icon_assets!` and layered over `gpui_kit::assets::Assets`. Add icons there, not through `AllAssets`.
 - **Dates:** `chrono` is used only in `crates/app`, for the DatePicker. Convert with `crates/app/src/dates.rs`. `sett-store` keeps its own `Date`.
 - **Watcher events** reach GPUI over `async-channel` (`Watcher::events()`).
+- **Light and Dark:** `gpui_kit::init` always starts in Light (`C/theme/mod.rs` `init`). `Shell::new` calls `Theme::sync_system_appearance` and re-syncs from `observe_window_appearance`. `--appearance light|dark` (and `scripts/screenshot --appearance`) forces one through `App::set_window_appearance`, which sets `NSApp.appearance`. Passing `-AppleInterfaceStyle Dark` doesn't change it.
 
 ## Testing gotchas
 
@@ -19,6 +20,7 @@ Imports: `use gpui_kit::*;` gives GPUI. `gpui_kit::component` re-exports `h_flex
 - **Shared UI helpers** live in `crates/app/tests/common/mod.rs`: `open_shell`, `click_label`, `right_click_label`, `find_label`.
 - **`test-support`** is enabled on gpui-kit only for `crates/app` (dev-dependency). Turning it on forced `taffy` down to 0.15 and `unicode-properties` down to 0.1.3 in the lockfile. The forked editor's own view tests sit behind its `view-tests` feature, which needs `test-support` turned on from the command line: `cargo test -p gpui-kit-markdown-editor --features view-tests,gpui-kit/test-support`. CI runs this. `--features view-tests` alone doesn't compile.
 - **Looking at the UI:** `scripts/screenshot` captures the real window against fixture data. Read the PNG to check layout yourself. Run it as its own Bash call that starts with `scripts/screenshot`, with full paths and nothing like `X=...;` before it: the sandbox exception in `.claude/settings.json` only matches that form, and inside the sandbox the capture fails with "could not create image from window". Use `--delay SECS` rather than an environment variable, and `--root DIR` to capture another worktree's build. On this machine a tiling window manager resizes the window, at times to about 743x919 pt, when only the first Column of a Board shows in full. The script warns when that happens; put the Cards under test in the first Column.
+- **Appearance can't be tested in-process.** The test platform always reports Light, and `TestWindow::simulate_appearance_change` is crate-private. Check Dark with `scripts/screenshot --appearance dark`.
 - **`update_window` on `TestAppContext`** needs `use gpui_kit::AppContext as _;` in scope, or the call fails with E0599 ("no method named `update_window`").
 
 ## Editor fork
