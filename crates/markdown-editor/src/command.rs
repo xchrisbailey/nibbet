@@ -1093,6 +1093,18 @@ impl BlockEditorModel {
     }
 
     fn paste_block_markdown(&mut self, text: &str, own: bool) -> Result<bool, CommandError> {
+        self.paste_block_markdown_as(text, own, false)
+    }
+
+    /// `separate` keeps the pasted paragraphs whole: the caret's paragraph
+    /// is split around them rather than their first and last being merged
+    /// into the text before and after the caret.
+    fn paste_block_markdown_as(
+        &mut self,
+        text: &str,
+        own: bool,
+        separate: bool,
+    ) -> Result<bool, CommandError> {
         // Single-line text is plain unless it holds an inline atom's
         // Markdown (a copied image), which pastes back as the atom, or an
         // inline code span (`x`), which pastes back as code.
@@ -1174,14 +1186,21 @@ impl BlockEditorModel {
                 delete_range(tx, range)?
             };
             let mut blocks = blocks;
-            let head = blocks.first().and_then(paragraph_inline);
+            // FORK: `separate` merges nothing into the halves.
+            let head = blocks
+                .first()
+                .and_then(paragraph_inline)
+                .filter(|_| !separate);
             if head.is_some() {
                 blocks.remove(0);
             }
             let tail = if blocks.is_empty() {
                 None
             } else {
-                blocks.last().and_then(paragraph_inline)
+                blocks
+                    .last()
+                    .and_then(paragraph_inline)
+                    .filter(|_| !separate)
             };
             if tail.is_some() {
                 blocks.pop();
@@ -1806,6 +1825,20 @@ impl BlockEditorModel {
     /// (a table cell), the text goes in raw. Returns whether anything changed.
     pub(crate) fn insert_markdown_at_caret(&mut self, text: &str) -> Result<bool, CommandError> {
         if self.paste_block_markdown(text, true)? {
+            return Ok(true);
+        }
+        self.insert_text(text, EditOrigin::Paste)?;
+        Ok(true)
+    }
+
+    /// FORK: like `insert_markdown_at_caret`, but every pasted block stays a
+    /// block of its own: a paragraph at the caret is split around them (an
+    /// empty one is filled), so an image never lands inside other text.
+    pub(crate) fn insert_markdown_blocks_at_caret(
+        &mut self,
+        text: &str,
+    ) -> Result<bool, CommandError> {
+        if self.paste_block_markdown_as(text, true, true)? {
             return Ok(true);
         }
         self.insert_text(text, EditOrigin::Paste)?;
