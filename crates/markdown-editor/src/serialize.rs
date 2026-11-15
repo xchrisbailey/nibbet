@@ -370,6 +370,19 @@ pub(crate) fn table_cell_markdown(inline: &InlineText) -> String {
     )
 }
 
+/// Escapes what would end or split an image's alt text. The alt is plain text
+/// (mdast drops any formatting in it), so nothing else needs it.
+fn escape_alt(alt: &str) -> String {
+    let mut out = String::with_capacity(alt.len());
+    for c in alt.chars() {
+        if matches!(c, '\\' | '[' | ']') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn inline_markdown_with(
     inline: &InlineText,
     options: MarkdownSourceOptions,
@@ -385,7 +398,8 @@ fn inline_markdown_with(
             }
             Some(InlineAtom::Custom(node)) => source.push_marked(&custom_markdown(node), marks),
             Some(InlineAtom::Image(image)) => {
-                let alt = image.alt.as_deref().unwrap_or_default();
+                // FORK: unescaped, a `]` in the alt text ended the image early.
+                let alt = escape_alt(image.alt.as_deref().unwrap_or_default());
                 let markdown = match &image.title {
                     Some(title) => format!(
                         "![{alt}]({} {})",
