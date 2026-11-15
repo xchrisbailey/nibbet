@@ -263,6 +263,21 @@ fn the_insert_menu_attachment_option_attaches_the_picked_files(cx: &mut TestAppC
 }
 
 #[gpui_kit::test]
+fn the_picked_files_go_in_where_the_menu_was_not_where_the_caret_went(cx: &mut TestAppContext) {
+    let (f, path) = open_plan(cx, "First line\n");
+    press(cx, &f, "secondary-down enter");
+    input(cx, &f, "/att");
+    press(cx, &f, "enter");
+    // The user clicks elsewhere while the picker is open.
+    press(cx, &f, "secondary-up");
+
+    let (_dir, files) = sources(&[("a.png", b"a")]);
+    cx.simulate_path_prompt_response(move |_| Some(files));
+    cx.run_until_parked();
+    assert_eq!(saved_body(cx, &path), "First line\n\n![a](plan/a.png)\n");
+}
+
+#[gpui_kit::test]
 fn cancelling_the_picker_leaves_the_empty_block(cx: &mut TestAppContext) {
     let (f, path) = open_plan(cx, "First line\n");
     press(cx, &f, "secondary-down enter");

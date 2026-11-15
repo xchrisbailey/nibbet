@@ -117,6 +117,21 @@ fn pasting_a_copied_image_into_another_item_copies_the_file_as_one_undo_step(
 }
 
 #[gpui_kit::test]
+fn raw_mode_copy_and_paste_carries_the_files_too(cx: &mut TestAppContext) {
+    let f = two_notes(cx);
+    cx.update_window(f.window, |_, window, cx| window.press("cmd-/", cx))
+        .unwrap();
+    cx.run_until_parked();
+    copy_all(cx, &f);
+    open(cx, &f, "other");
+    press(cx, &f, "secondary-down enter secondary-v");
+
+    let notes = f.data_root.join("personal/notes");
+    assert_eq!(fs::read(notes.join("other/shot.png")).unwrap(), b"png");
+    assert!(body(cx, &f, "other").contains("![shot](other/shot.png)"));
+}
+
+#[gpui_kit::test]
 fn cut_leaves_the_source_files_where_they_are(cx: &mut TestAppContext) {
     let f = two_notes(cx);
     press(cx, &f, "secondary-a secondary-x");
