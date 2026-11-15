@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use crate::attach::file_name;
 use gpui_kit::{ImageSource, Resource};
 use markdown_editor::{ImageDisplay, LinkDecoration};
 use sett_store::{AttachmentOwner, Resolved, Space, Store, is_inline_image};
@@ -115,11 +116,6 @@ fn is_image_file(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .is_some_and(is_inline_image)
-}
-
-fn file_name(path: &Path) -> String {
-    path.file_name()
-        .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
 }
 
 /// The host of an `http(s)` (or protocol-relative) URL, without credentials

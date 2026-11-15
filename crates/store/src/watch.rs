@@ -199,69 +199,72 @@ fn classify(rel: &Path) -> Option<Change> {
     match parts.as_slice() {
         [] | ["projects"] | ["notes"] | ["journal"] => Some(Change::All),
         ["templates"] => Some(Change::Templates),
-        ["templates", f, rest @ ..] => match md_stem(f) {
-            Some(stem) if rest.is_empty() => Some(Change::Template(stem.to_string())),
-            Some(_) => None,
-            None => attachment(AttachmentOwner::Template(f.to_string()), f, rest),
-        },
+        ["templates", f, rest @ ..] => entry(f, rest, Change::Template, AttachmentOwner::Template),
         ["projects", p, rest @ ..] if visible(p) => {
             let project = p.to_string();
             match rest {
                 [] | ["project.md"] | ["tasks"] | ["notes"] => Some(Change::Project(project)),
-                ["tasks", f, rest @ ..] => match md_stem(f) {
-                    Some(slug) if rest.is_empty() => Some(Change::Task {
-                        project,
-                        slug: slug.to_string(),
-                    }),
-                    Some(_) => None,
-                    None => attachment(
-                        AttachmentOwner::Task {
-                            project,
-                            slug: f.to_string(),
-                        },
-                        f,
-                        rest,
-                    ),
-                },
-                ["notes", f, rest @ ..] => match md_stem(f) {
-                    Some(slug) if rest.is_empty() => Some(Change::Note {
-                        project: Some(project),
-                        slug: slug.to_string(),
-                    }),
-                    Some(_) => None,
-                    None => attachment(
-                        AttachmentOwner::Note {
-                            project: Some(project),
-                            slug: f.to_string(),
-                        },
-                        f,
-                        rest,
-                    ),
-                },
+                ["tasks", f, rest @ ..] => entry(
+                    f,
+                    rest,
+                    |slug| Change::Task {
+                        project: project.clone(),
+                        slug,
+                    },
+                    |slug| AttachmentOwner::Task {
+                        project: project.clone(),
+                        slug,
+                    },
+                ),
+                ["notes", f, rest @ ..] => entry(
+                    f,
+                    rest,
+                    |slug| Change::Note {
+                        project: Some(project.clone()),
+                        slug,
+                    },
+                    |slug| AttachmentOwner::Note {
+                        project: Some(project.clone()),
+                        slug,
+                    },
+                ),
                 _ => None,
             }
         }
-        ["notes", f, rest @ ..] => match md_stem(f) {
-            Some(slug) if rest.is_empty() => Some(Change::Note {
+        ["notes", f, rest @ ..] => entry(
+            f,
+            rest,
+            |slug| Change::Note {
                 project: None,
-                slug: slug.to_string(),
-            }),
-            Some(_) => None,
-            None => attachment(
-                AttachmentOwner::Note {
-                    project: None,
-                    slug: f.to_string(),
-                },
-                f,
-                rest,
-            ),
-        },
+                slug,
+            },
+            |slug| AttachmentOwner::Note {
+                project: None,
+                slug,
+            },
+        ),
         ["journal", f, rest @ ..] => match f.strip_suffix(".md") {
             Some(stem) if rest.is_empty() => Some(Change::Journal(Date::parse(stem)?)),
             Some(_) => None,
             None => attachment(AttachmentOwner::Journal(Date::parse(f)?), f, rest),
         },
         _ => None,
+    }
+}
+
+/// What an entry named `name` below a `tasks/`, `notes/` or `templates/`
+/// folder is: the Item's file (`file` builds its change from the slug), or
+/// something in its Attachment folder (`owner` builds who owns it).
+fn entry(
+    name: &str,
+    rest: &[&str],
+    file: impl FnOnce(String) -> Change,
+    owner: impl FnOnce(String) -> AttachmentOwner,
+) -> Option<Change> {
+    match md_stem(name) {
+        Some(slug) if rest.is_empty() => Some(file(slug.to_string())),
+        Some(_) => None,
+        None => attachment(owner(name.to_string()), name, rest),
     }
 }
 
