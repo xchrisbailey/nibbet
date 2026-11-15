@@ -127,6 +127,7 @@ impl Project {
 /// Moves a file or folder out of the data root.
 type TrashFn = Arc<dyn Fn(&Path) -> io::Result<()> + Send + Sync>;
 
+#[derive(Clone)]
 pub struct Store {
     root: PathBuf,
     log: WriteLog,

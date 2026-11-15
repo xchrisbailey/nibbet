@@ -1,4 +1,6 @@
 use std::io;
+use std::path::Path;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,14 +9,17 @@ use gpui_kit::component::notification::Notification;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, StyledExt as _, WindowExt as _, v_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement as _, Render, Role, ScrollHandle,
+    IntoElement, MouseButton, ParentElement as _, Render, RetainAllImageCache, Role, ScrollHandle,
     StatefulInteractiveElement as _, Styled as _, Subscription, Task, TestSupportExt as _, Window,
-    div, prelude::FluentBuilder as _,
+    div, image_cache, prelude::FluentBuilder as _,
 };
 use markdown_editor::{BlockEditor, BlockEditorEvent, BlockEditorState};
-use sett_store::{Date, EditorMode, JournalEntry, LinkTarget, Note, Space, Template};
+use sett_store::{
+    AttachmentItem, Date, EditorMode, JournalEntry, LinkTarget, Note, Space, Template,
+};
 
-use crate::app_model::AppModel;
+use crate::app_model::{AppModel, AppModelEvent};
+use crate::attachments::{Attachments, Open};
 use crate::dates::to_chrono;
 use crate::item_links::ItemLinks;
 use crate::notice::frontmatter_notice;
@@ -22,6 +27,22 @@ use crate::notice::frontmatter_notice;
 pub(crate) struct OpenInsertMenuOnLoad;
 
 impl gpui_kit::Global for OpenInsertMenuOnLoad {}
+
+/// How a Cmd-clicked Attachment reaches the system's default app. Tests set
+/// one to see what would open; without it the platform opener runs.
+#[derive(Clone)]
+pub struct AttachmentOpener(pub Rc<OpenFn>);
+
+type OpenFn = dyn Fn(&Path, &mut App);
+
+impl gpui_kit::Global for AttachmentOpener {}
+
+fn open_attachment(path: &Path, cx: &mut App) {
+    match cx.try_global::<AttachmentOpener>().cloned() {
+        Some(opener) => (opener.0)(path, cx),
+        None => cx.open_with_system(path),
+    }
+}
 
 /// How long after the last keystroke an edit is written.
 const AUTOSAVE_DELAY: Duration = Duration::from_millis(500);
@@ -93,6 +114,21 @@ impl EditorTarget {
         match self {
             EditorTarget::Item(item) => Some(item),
             EditorTarget::Template { .. } => None,
+        }
+    }
+
+    fn attachment_item(&self) -> AttachmentItem {
+        match self {
+            EditorTarget::Item(ItemRef::Note { project, slug, .. }) => AttachmentItem::Note {
+                project: project.clone(),
+                slug: slug.clone(),
+            },
+            EditorTarget::Item(ItemRef::Journal { date, .. }) => AttachmentItem::Journal(*date),
+            EditorTarget::Item(ItemRef::Task { project, slug, .. }) => AttachmentItem::Task {
+                project: project.clone(),
+                slug: slug.clone(),
+            },
+            EditorTarget::Template { slug, .. } => AttachmentItem::Template(slug.clone()),
         }
     }
 
@@ -172,6 +208,11 @@ pub(crate) struct ItemEditor {
     mode: EditorMode,
     title: Entity<InputState>,
     block: Entity<BlockEditorState>,
+    /// Decoded images for the open Item only, so they go with it instead of
+    /// staying in gpui's app-wide cache for the whole run.
+    images: Entity<RetainAllImageCache>,
+    /// What the body's links and images point at, for the open Item.
+    attachments: Option<Arc<Attachments>>,
     raw: Entity<EditorState>,
     scroll: ScrollHandle,
     autosave: Option<Task<()>>,
@@ -191,6 +232,7 @@ impl ItemEditor {
             state.set_scroll_handle(scroll.clone());
             state
         });
+        let images = RetainAllImageCache::new(cx);
         let raw = cx.new(|cx| {
             EditorState::new(window, cx)
                 .language("markdown")
@@ -209,9 +251,7 @@ impl ItemEditor {
                         this.edited(window, cx);
                     }
                     BlockEditorEvent::LinkClicked { url } => {
-                        if let Some(url) = openable_url(url) {
-                            cx.open_url(url);
-                        }
+                        this.open_link(url, window, cx);
                     }
                     BlockEditorEvent::WikiLinkClicked { slug, heading } => {
                         this.follow_link(slug, heading.as_deref(), window, cx);
@@ -222,6 +262,13 @@ impl ItemEditor {
                     _ => {}
                 },
             ),
+            cx.subscribe_in(&model, window, |this, _, event, window, cx| {
+                if let AppModelEvent::AttachmentChanged(item) = event
+                    && this.attachments.as_ref().map(|a| a.item()) == Some(item)
+                {
+                    this.refresh_attachments(window, cx);
+                }
+            }),
             cx.subscribe_in(&raw, window, |this, raw, event: &InputEvent, window, cx| {
                 if let InputEvent::Change = event {
                     this.body = raw.read(cx).value().to_string();
@@ -251,6 +298,8 @@ impl ItemEditor {
             mode,
             title,
             block,
+            images,
+            attachments: None,
             raw,
             scroll,
             autosave: None,
@@ -375,6 +424,7 @@ impl ItemEditor {
 
     fn close(&mut self, cx: &mut Context<Self>) {
         self.target = None;
+        self.attachments = None;
         self.seen = None;
         self.base = None;
         self.dirty = false;
@@ -592,12 +642,58 @@ impl ItemEditor {
         self.block
             .update(cx, |block, cx| block.set_readonly(locked, cx));
         self.load_body(window, cx);
+        self.refresh_attachments(window, cx);
         self.seen = seen;
         self.base = Some(base);
         self.dirty = false;
         self.asking = false;
         self.autosave = None;
         cx.notify();
+    }
+
+    /// Starts answering for the open Item from the disk as it is now: drops
+    /// every remembered answer and decoded image, and tells the block editor
+    /// to ask again. Runs when an Item opens or reloads, and when a file in
+    /// its folder changes.
+    fn refresh_attachments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(target) = &self.target else {
+            self.attachments = None;
+            return;
+        };
+        let attachments = Arc::new(Attachments::new(
+            self.model.read(cx).store(),
+            target.space(),
+            target.attachment_item(),
+        ));
+        self.attachments = Some(attachments.clone());
+        self.images
+            .update(cx, |images, cx| images.clear(window, cx));
+        let for_images = attachments.clone();
+        self.block.update(cx, |block, cx| {
+            block.set_image_display(Arc::new(move |url| for_images.image_display(url)), cx);
+            block.set_link_decoration(Arc::new(move |url| attachments.link_decoration(url)), cx);
+        });
+    }
+
+    /// Cmd-click on a link or image: web and mail links go to the browser or
+    /// mail app, an Attachment opens in its default app, and one that is gone
+    /// says so.
+    fn open_link(&mut self, url: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(url) = openable_url(url) {
+            cx.open_url(url);
+            return;
+        }
+        let Some(attachments) = &self.attachments else {
+            return;
+        };
+        match attachments.open(url) {
+            Open::File(path) => open_attachment(&path, cx),
+            Open::Missing(name) => window.push_notification(
+                Notification::warning(format!("Couldn\u{2019}t find {name}.")),
+                cx,
+            ),
+            Open::Ignore => {}
+        }
     }
 
     /// Creates the Note the Link Picker's last row offered, in the open
@@ -769,7 +865,10 @@ impl ItemEditor {
                 .flex_col()
                 .overflow_y_scroll()
                 .track_scroll(&self.scroll)
-                .child(BlockEditor::new(&self.block).px_8().pt_4())
+                .child(
+                    image_cache(self.images.clone())
+                        .child(BlockEditor::new(&self.block).px_8().pt_4()),
+                )
                 .child(div().flex_grow(1.).min_h_16().cursor_text().on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _, window, cx| {

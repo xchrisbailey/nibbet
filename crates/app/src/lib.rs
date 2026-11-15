@@ -2,6 +2,7 @@
 //! built on `sett-store`.
 
 mod app_model;
+mod attachments;
 mod board;
 mod center;
 mod confirm_delete;
@@ -24,6 +25,7 @@ mod templates;
 pub use app_model::{AppModel, AppModelEvent, Selection};
 pub use board::BoardEvent;
 pub use icons::AppAssets;
+pub use item_editor::AttachmentOpener;
 pub use shell::{
     ArchiveProject, DeleteProject, EditProject, GoBack, GoForward, NewProject, Shell, ShowPersonal,
     ShowWork, ToggleEditorMode, UnarchiveProject,
