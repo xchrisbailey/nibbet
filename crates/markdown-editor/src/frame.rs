@@ -426,6 +426,10 @@ pub(crate) struct TableShape {
 /// `border_r_1` between columns, `border_1` frame).
 const CELL_PAD_Y: f32 = 7.;
 const RULE: f32 = 1.;
+/// gpui-base's narrowest column (`CELL_MIN_PX`), measured with its default
+/// padding (`CELL_PAD_PX`) and divider included.
+const CELL_MIN: f32 = 48.;
+const CELL_PAD: f32 = 24.;
 
 impl FrameLayout {
     /// Rebuild each table's column and row boxes from where its cells'
@@ -455,30 +459,46 @@ impl FrameLayout {
                 }
             }
             let cols = shape.grid.iter().map(Vec::len).max().unwrap_or(0);
-            // Each column's text element (left, width): all cells of a
-            // column share it.
-            let mut elems: Vec<Option<(Pixels, Pixels)>> = vec![None; cols];
-            for row in &shape.grid {
-                for (c, cell) in row.iter().enumerate() {
-                    if elems[c].is_none()
-                        && let Some(leaf) = self.leaf(*cell)
-                    {
-                        let b = leaf.bounds();
-                        elems[c] = Some((b.left(), b.size.width));
-                    }
-                }
-            }
-            let Some(elems) = elems.into_iter().collect::<Option<Vec<_>>>() else {
-                continue;
-            };
-            if elems.is_empty() {
-                continue;
-            }
             let share = |c: usize| match shape.aligns.get(c).copied().unwrap_or_default() {
                 ColumnAlign::Center => (0.5, 0.5),
                 ColumnAlign::Right => (1., 0.),
                 _ => (0., 1.),
             };
+            // Each column's content box (left, width). In a Centre or Right
+            // column every cell's text element shrinks to its own text and
+            // sits centred or at the end, so no single row gives the box
+            // (#99): the box spans all of the column's text elements. A
+            // column whose text is narrower than gpui-kit's cell floor
+            // (`CELL_MIN_PX` less `CELL_PAD_PX` and the divider) still gets
+            // the floor's width, placed by the column alignment.
+            let mut spans: Vec<Option<(Pixels, Pixels)>> = vec![None; cols];
+            for row in &shape.grid {
+                for (c, cell) in row.iter().enumerate() {
+                    if let Some(leaf) = self.leaf(*cell) {
+                        let b = leaf.bounds();
+                        spans[c] = Some(match spans[c] {
+                            Some((l, r)) => (l.min(b.left()), r.max(b.right())),
+                            None => (b.left(), b.right()),
+                        });
+                    }
+                }
+            }
+            let Some(spans) = spans.into_iter().collect::<Option<Vec<_>>>() else {
+                continue;
+            };
+            if spans.is_empty() {
+                continue;
+            }
+            let elems: Vec<(Pixels, Pixels)> = spans
+                .iter()
+                .enumerate()
+                .map(|(c, &(l, r))| {
+                    let divider = if c + 1 < cols { RULE } else { 0. };
+                    let w = (r - l).max(px(CELL_MIN - CELL_PAD - divider));
+                    let (lead, _) = share(c);
+                    (l - (w - (r - l)) * lead, w)
+                })
+                .collect();
             let cell_w = |c: usize| elems[c].1 + pad_x * 2.;
             let rule = px(RULE);
             // Slack per pixel of cell width, from the first informative gap.
