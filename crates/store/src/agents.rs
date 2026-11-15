@@ -8,7 +8,11 @@ use std::path::Path;
 const BODY: &str = include_str!("agents.md");
 // Earlier releases wrote the file without markers. Matching them exactly is
 // how we tell an untouched file (safe to replace) from one the user edited.
-const SHIPPED: [&str; 2] = [include_str!("agents_v1.md"), include_str!("agents_v2.md")];
+const SHIPPED: [&str; 3] = [
+    include_str!("agents_v1.md"),
+    include_str!("agents_v2.md"),
+    include_str!("agents_v3.md"),
+];
 const BEGIN: &str = "<!-- sett:begin -->";
 const END: &str = "<!-- sett:end -->";
 

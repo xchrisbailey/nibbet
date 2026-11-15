@@ -5,6 +5,7 @@ use sett_store::Store;
 
 const SHIPPED_V1: &str = include_str!("../src/agents_v1.md");
 const SHIPPED_V2: &str = include_str!("../src/agents_v2.md");
+const SHIPPED_V3: &str = include_str!("../src/agents_v3.md");
 const BEGIN: &str = "<!-- sett:begin -->";
 const END: &str = "<!-- sett:end -->";
 
@@ -46,6 +47,8 @@ fn marked_block_is_replaced_and_text_outside_survives() {
     assert!(!text.contains("old wording"));
     assert!(text.contains("templates/<slug>.md"));
     assert!(text.contains("labels:"), "marked files get the Labels docs");
+    assert!(text.contains("An Item's Attachments (images and other files)"));
+    assert!(text.contains("# that Item's Attachments (optional)"));
 }
 
 #[test]
@@ -77,7 +80,12 @@ fn current_block_is_not_rewritten() {
 
 #[test]
 fn unmarked_shipped_versions_are_replaced_wholesale() {
-    for shipped in [SHIPPED_V1, SHIPPED_V2, &SHIPPED_V2.replace('\n', "\r\n")] {
+    for shipped in [
+        SHIPPED_V1,
+        SHIPPED_V2,
+        SHIPPED_V3,
+        &SHIPPED_V3.replace('\n', "\r\n"),
+    ] {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         fs::write(root.join("AGENTS.md"), shipped).unwrap();

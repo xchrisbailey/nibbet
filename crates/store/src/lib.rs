@@ -6,6 +6,7 @@
 //! that an Item is written only after it was edited (ADR 0003).
 
 mod agents;
+mod attachment;
 mod board;
 mod callout;
 mod date;
@@ -25,6 +26,7 @@ use std::sync::Arc;
 
 use serde_yaml_ng::{Mapping, Value};
 
+pub use attachment::{Attached, AttachmentItem, Resolved, is_inline_image};
 pub use board::{Board, BoardColumn, MIN_COLUMNS};
 pub use callout::{CalloutKind, TaskCallout};
 pub use date::Date;
@@ -492,7 +494,7 @@ impl Store {
     }
 
     fn template_slug(&self, dir: &Path, title: &str, own: Option<&str>) -> String {
-        let taken: HashSet<String> = markdown_stems(dir)
+        let taken: HashSet<String> = taken_names(dir)
             .into_iter()
             .filter(|s| Some(s.as_str()) != own)
             .collect();
@@ -508,7 +510,7 @@ impl Store {
             dirs.push(project.join("notes"));
             dirs.push(project.join("tasks"));
         }
-        let taken: HashSet<String> = dirs.iter().flat_map(|d| markdown_stems(d)).collect();
+        let taken: HashSet<String> = dirs.iter().flat_map(|d| taken_names(d)).collect();
         slug::unique_slug(&slug::slugify(title), |s| {
             taken.contains(s) || Date::parse(s).is_some()
         })
@@ -599,7 +601,8 @@ impl Store {
         check_slug(&task.project)?;
         check_slug(&task.slug)?;
         let dir = self.project_dir(task.space, &task.project).join("tasks");
-        self.trash(&dir.join(md(&task.slug)))
+        self.trash(&dir.join(md(&task.slug)))?;
+        self.trash_attachments(task.space, &task.into())
     }
 
     pub fn trash_note(&self, note: &Note) -> io::Result<()> {
@@ -611,16 +614,19 @@ impl Store {
             &self
                 .notes_dir(note.space, note.project.as_deref())
                 .join(md(&note.slug)),
-        )
+        )?;
+        self.trash_attachments(note.space, &note.into())
     }
 
     pub fn trash_template(&self, template: &Template) -> io::Result<()> {
         check_slug(&template.slug)?;
-        self.trash(&self.templates_dir(template.space).join(md(&template.slug)))
+        self.trash(&self.templates_dir(template.space).join(md(&template.slug)))?;
+        self.trash_attachments(template.space, &template.into())
     }
 
     pub fn trash_journal_entry(&self, entry: &JournalEntry) -> io::Result<()> {
-        self.trash(&self.journal_path(entry))
+        self.trash(&self.journal_path(entry))?;
+        self.trash_attachments(entry.space, &entry.into())
     }
 
     fn write_project(&self, project: &Project) -> io::Result<()> {
@@ -747,6 +753,14 @@ fn markdown_stems(dir: &Path) -> Vec<String> {
             Some(name.strip_suffix(".md")?.to_string())
         })
         .collect()
+}
+
+/// Names a new slug can't use in `dir`: Item files, and folders, since a
+/// leftover Attachment folder would otherwise become the new Item's.
+fn taken_names(dir: &Path) -> Vec<String> {
+    let mut names = markdown_stems(dir);
+    names.extend(subdirs(dir).into_iter().map(|(name, _)| name));
+    names
 }
 
 fn check_slug(slug: &str) -> io::Result<()> {

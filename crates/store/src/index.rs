@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::links::{InboundLink, ItemId, Link, LinkGraph, LinkTarget};
-use crate::{Date, JournalEntry, Note, Project, Space, Store, Task};
+use crate::{AttachmentItem, Date, JournalEntry, Note, Project, Space, Store, Task};
 
 /// Something in a Space that may have changed on disk. Applying a `Change`
 /// re-reads that thing, so the same `Change` covers create, edit and delete.
@@ -23,6 +23,13 @@ pub enum Change {
     /// Items, so the index holds nothing for them; the app re-reads the
     /// Template from the Store.
     Template(String),
+    /// A file in an Item's Attachment folder, or the folder itself (`file`
+    /// is `None`). Nothing in the index depends on it; the app drops the
+    /// cached image.
+    Attachment {
+        item: AttachmentItem,
+        file: Option<String>,
+    },
     /// The `templates/` folder itself moved or vanished: reload the list.
     Templates,
     /// A top-level folder of the Space moved or vanished: rescan everything.
@@ -130,7 +137,9 @@ impl SpaceIndex {
                 );
                 sync(&mut self.journal, *date, fresh)
             }
-            Change::Template(_) | Change::Templates => Update::Unchanged,
+            Change::Template(_) | Change::Templates | Change::Attachment { .. } => {
+                Update::Unchanged
+            }
             Change::Project(slug) => self.apply_project(store, slug),
             Change::All => {
                 let fresh = SpaceIndex::scan(store, space);
