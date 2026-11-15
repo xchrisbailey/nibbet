@@ -4680,3 +4680,34 @@ fn host_link_decoration_adds_a_paperclip_and_leaves_the_source_alone(cx: &mut Te
         initial.replacen("report]", "repoXrt]", 1)
     );
 }
+
+#[gpui::test]
+fn a_selected_image_reports_its_box_for_the_ring(cx: &mut TestAppContext) {
+    let initial = format!("ab![d]({PNG_30X20})cd");
+    let (editor, cx, _) = open_hosted(cx, &initial, |_, _| {});
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(10));
+    draw(cx);
+    assert!(editor.read_with(cx, |e, _| e.selected_images()).is_empty());
+    editor.update(cx, |e, cx| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        e.set_selection(
+            BlockSelection::Text {
+                anchor: BlockPosition::new(id, 2),
+                head: BlockPosition::new(id, 5),
+            },
+            cx,
+        )
+        .unwrap();
+    });
+    draw(cx);
+    let (selected, bounds) = editor.read_with(cx, |e, _| {
+        let selected = e.selected_images();
+        let id = e.model().document().leaves().next().unwrap().id();
+        let bounds = e.frame.borrow().leaf(id).unwrap().atom_bounds(2..5);
+        (selected, bounds)
+    });
+    assert_eq!(selected.len(), 1);
+    let bounds = bounds.expect("the image is laid out");
+    assert_eq!((bounds.size.width, bounds.size.height), (px(30.), px(20.)));
+}

@@ -1176,6 +1176,27 @@ impl BlockEditorState {
             .collect()
     }
 
+    /// FORK: the image atoms inside the selection, as leaf byte ranges, for
+    /// their selection ring.
+    pub(crate) fn selected_images(&self) -> Vec<(BlockId, Range<usize>)> {
+        self.selection_ranges()
+            .into_iter()
+            .flat_map(|(block, range)| {
+                self.model
+                    .doc
+                    .inline(block)
+                    .into_iter()
+                    .flat_map(|inline| inline.pieces())
+                    .filter(move |(piece, _, atom)| {
+                        matches!(atom, Some(super::inline::InlineAtom::Image(_)))
+                            && range.start <= piece.start
+                            && piece.end <= range.end
+                    })
+                    .map(move |(piece, _, _)| (block, piece))
+            })
+            .collect()
+    }
+
     pub(crate) fn marked_range(&self) -> Option<(BlockId, Range<usize>)> {
         self.marked.as_ref().map(|m| (m.block, m.range.clone()))
     }

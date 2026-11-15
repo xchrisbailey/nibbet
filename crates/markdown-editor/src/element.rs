@@ -723,6 +723,11 @@ impl Element for EditorRoot {
     ) {
         let state = self.state.read(cx);
         let focus = state.focus_handle.clone();
+        let selected_images = state.selected_images();
+        let (ring, ring_radius) = {
+            let theme = gpui_kit::base::Theme::global(cx);
+            (theme.tokens.colors.ring, theme.tokens.radius.sm)
+        };
         let collapsed = state.selection_ranges().is_empty();
         let marked = state.marked_range();
         let caret = state.model.caret();
@@ -842,6 +847,22 @@ impl Element for EditorRoot {
             let open = menu_line == Some((table, line));
             let alpha = if open { 0.8 } else { 0.35 };
             window.paint_quad(fill(grip, style.caret().opacity(alpha)).corner_radii(px(2.)));
+        }
+        // FORK: a selected image shows a 2px ring in the theme's ring colour.
+        for (block, range) in &selected_images {
+            if let Some(image) = frame
+                .leaf(*block)
+                .and_then(|l| l.atom_bounds(range.clone()))
+            {
+                window.paint_quad(gpui::quad(
+                    image.dilate(px(1.)),
+                    ring_radius,
+                    gpui::transparent_black(),
+                    px(2.),
+                    ring,
+                    gpui::BorderStyle::Solid,
+                ));
+            }
         }
         if let Some(area) = selected_area {
             let area = area.dilate(px(4.));
