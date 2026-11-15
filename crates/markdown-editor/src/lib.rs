@@ -61,6 +61,8 @@ mod element;
 mod frame;
 mod host;
 mod id;
+// FORK: loaded images drawn with a border and a height cap.
+mod image_object;
 mod import;
 mod inline;
 mod input_rule;

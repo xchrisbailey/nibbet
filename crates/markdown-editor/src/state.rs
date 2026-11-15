@@ -13,6 +13,7 @@ use gpui::{
     Window, actions,
 };
 
+use super::image_object::{ImageObjectPlugin, ImageWidths};
 use super::wiki_link::{
     DirectoryHandle, HoverHandle, WikiChipPlugin, WikiLinkDirectory, WikiLinkState,
 };
@@ -530,6 +531,8 @@ pub struct BlockEditorState {
     wiki_links: DirectoryHandle,
     /// FORK: the chip under the pointer while Cmd/Ctrl is held.
     wiki_hover: HoverHandle,
+    /// FORK: the widths the image objects wrap at.
+    pub(crate) image_widths: ImageWidths,
     /// An IME composition opened an undo group that is not committed yet.
     composition_open: bool,
     /// Remembered x for repeated up/down.
@@ -618,12 +621,16 @@ impl BlockEditorState {
         // FORK: the Link chip plugin reads the directory through this handle.
         let wiki_links = DirectoryHandle::default();
         let wiki_hover = HoverHandle::default();
+        let image_widths = ImageWidths::default();
         let extensions = MarkdownExtensions::default()
             .plugin(WikiChipPlugin {
                 directory: wiki_links.clone(),
                 hover: wiki_hover.clone(),
             })
             .plugin(ImagePlaceholderPlugin)
+            .plugin(ImageObjectPlugin {
+                widths: image_widths.clone(),
+            })
             .plugin(AttachmentIconPlugin);
         let model = BlockEditorModel::from_markdown("", extensions)
             .unwrap_or_else(|_| unreachable!("empty source always parses"));
@@ -641,6 +648,7 @@ impl BlockEditorState {
             marked: None,
             wiki_links,
             wiki_hover,
+            image_widths,
             composition_open: false,
             goal_x: None,
             dragging: false,

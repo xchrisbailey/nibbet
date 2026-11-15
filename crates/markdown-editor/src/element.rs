@@ -680,6 +680,34 @@ impl Element for EditorRoot {
                 let right = frame.content.map(|c| c.right());
                 frame.layout_tables(&shapes, pad, right);
             }
+            // FORK: the widths image objects wrap at, for the next frame.
+            let widths_changed = {
+                let state = self.state.read(cx);
+                let content = self.content_bounds.get();
+                // A Callout pads both sides (`px_3`); nothing else pads right.
+                let callout_inset = window.rem_size() * 0.75;
+                state.image_widths.record(
+                    content.size.width,
+                    self.snapshot.leaves.iter().filter_map(|info| {
+                        let left = frame.leaf(info.block)?.bounds().left();
+                        let in_callout = state.model.doc.path(info.block).into_iter().any(|b| {
+                            matches!(
+                                state.model.doc.kind(b),
+                                Some(super::kind::BlockKindData::Blockquote {
+                                    callout: Some(_),
+                                    ..
+                                })
+                            )
+                        });
+                        let inset = if in_callout { callout_inset } else { px(0.) };
+                        Some((info.block.as_u64(), content.right() - left - inset))
+                    }),
+                )
+            };
+            if widths_changed {
+                let state = self.state.clone();
+                window.on_next_frame(move |_, cx| state.update(cx, |_, cx| cx.notify()));
+            }
             *self.state.read(cx).frame.borrow_mut() = frame;
             let mask = window.content_mask().bounds;
             let content = self.content_bounds.get();
