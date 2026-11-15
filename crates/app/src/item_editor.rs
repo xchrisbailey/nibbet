@@ -1,6 +1,4 @@
 use std::io;
-use std::path::Path;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,16 +13,15 @@ use gpui_kit::{
     div, image_cache, prelude::FluentBuilder as _,
 };
 use markdown_editor::{
-    BlockEditor, BlockEditorEvent, BlockEditorState, BlockKind, BlockSelection, ClipboardPolicy,
-    PasteRequest,
+    BlockEditor, BlockEditorEvent, BlockEditorState, BlockKind, ClipboardPolicy, PasteRequest,
 };
 use sett_store::{
     AttachmentOwner, Date, EditorMode, JournalEntry, LinkTarget, Note, Space, Template,
 };
 
 use crate::app_model::{AppModel, AppModelEvent};
-use crate::attach::{self, Landing, Source};
-use crate::attachments::{Attachments, Open};
+use crate::attach::{self, DropAt, Landing, Source};
+use crate::attachments::{Attachments, Open, open_attachment};
 use crate::dates::to_chrono;
 use crate::item_links::ItemLinks;
 use crate::notice::frontmatter_notice;
@@ -33,22 +30,6 @@ use crate::template_options::InsertAction;
 pub(crate) struct OpenInsertMenuOnLoad;
 
 impl gpui_kit::Global for OpenInsertMenuOnLoad {}
-
-/// How a Cmd-clicked Attachment reaches the system's default app. Tests set
-/// one to see what would open; without it the platform opener runs.
-#[derive(Clone)]
-pub struct AttachmentOpener(pub Rc<OpenFn>);
-
-type OpenFn = dyn Fn(&Path, &mut App);
-
-impl gpui_kit::Global for AttachmentOpener {}
-
-fn open_attachment(path: &Path, cx: &mut App) {
-    match cx.try_global::<AttachmentOpener>().cloned() {
-        Some(opener) => (opener.0)(path, cx),
-        None => cx.open_with_system(path),
-    }
-}
 
 /// How long after the last keystroke an edit is written.
 const AUTOSAVE_DELAY: Duration = Duration::from_millis(500);
@@ -926,35 +907,11 @@ impl ItemEditor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.mode != EditorMode::Block {
-            return;
+        if self.mode == EditorMode::Block {
+            self.block.update(cx, |block, cx| {
+                attach::place_caret(block, at, pointer, window, cx)
+            });
         }
-        match at {
-            DropAt::Pointer => self.move_caret_to(pointer, window, cx),
-            DropAt::End => self.block.update(cx, |block, cx| {
-                block.focus(window, cx);
-                // Only fails for an empty document, where the caret is
-                // already at the end.
-                block.select_end(cx).ok();
-            }),
-        }
-    }
-
-    fn move_caret_to(
-        &mut self,
-        point: gpui_kit::Point<gpui_kit::Pixels>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.block.update(cx, |block, cx| {
-            if let Some(position) = block.position_at(point)
-                && block
-                    .set_selection(BlockSelection::caret(position), cx)
-                    .is_ok()
-            {
-                block.focus(window, cx);
-            }
-        });
     }
 
     /// The one path for paste, drop and pick: copy `sources` into the Item's
@@ -1267,15 +1224,6 @@ impl ItemEditor {
                 .into_any_element(),
         }
     }
-}
-
-/// Where in the block view a drop of files goes.
-#[derive(Clone, Copy)]
-enum DropAt {
-    /// The caret nearest the pointer.
-    Pointer,
-    /// The end of the body.
-    End,
 }
 
 /// A region of the block view that takes dropped files: the caret follows the

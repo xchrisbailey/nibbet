@@ -24,9 +24,9 @@ mod template_options;
 mod templates;
 
 pub use app_model::{AppModel, AppModelEvent, Selection};
+pub use attachments::AttachmentOpener;
 pub use board::BoardEvent;
 pub use icons::AppAssets;
-pub use item_editor::AttachmentOpener;
 pub use shell::{
     ArchiveProject, DeleteProject, EditProject, GoBack, GoForward, NewProject, Shell, ShowPersonal,
     ShowWork, ToggleEditorMode, UnarchiveProject,

@@ -208,6 +208,44 @@ fn escape(text: &str) -> String {
     out
 }
 
+/// Where in the block view a drop of files goes.
+#[derive(Clone, Copy)]
+pub(crate) enum DropAt {
+    /// The caret nearest the pointer.
+    Pointer,
+    /// The end of the body.
+    End,
+}
+
+/// While files are dragged over the block view, and when they drop: puts the
+/// caret under `pointer` or at the end of the body, so the Markdown lands
+/// where the user is aiming.
+pub(crate) fn place_caret(
+    block: &mut BlockEditorState,
+    at: DropAt,
+    pointer: gpui_kit::Point<gpui_kit::Pixels>,
+    window: &mut Window,
+    cx: &mut Context<BlockEditorState>,
+) {
+    match at {
+        DropAt::Pointer => {
+            if let Some(position) = block.position_at(pointer)
+                && block
+                    .set_selection(BlockSelection::caret(position), cx)
+                    .is_ok()
+            {
+                block.focus(window, cx);
+            }
+        }
+        DropAt::End => {
+            block.focus(window, cx);
+            // Only fails for an empty document, where the caret is already
+            // at the end.
+            block.select_end(cx).ok();
+        }
+    }
+}
+
 /// The last text copied or cut from an editor, and the Item it came from,
 /// app-wide. A paste of the same text into another Item brings the source's
 /// Attachments along (ADR 0004).

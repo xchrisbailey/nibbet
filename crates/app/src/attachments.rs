@@ -3,12 +3,29 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Mutex;
 
 use crate::attach::file_name;
-use gpui_kit::{ImageSource, Resource};
+use gpui_kit::{App, ImageSource, Resource};
 use markdown_editor::{ImageDisplay, LinkDecoration};
 use sett_store::{AttachmentOwner, Resolved, Space, Store, is_inline_image};
+
+/// How a Cmd-clicked Attachment reaches the system's default app. Tests set
+/// one to see what would open; without it the platform opener runs.
+#[derive(Clone)]
+pub struct AttachmentOpener(pub Rc<OpenFn>);
+
+type OpenFn = dyn Fn(&Path, &mut App);
+
+impl gpui_kit::Global for AttachmentOpener {}
+
+pub(crate) fn open_attachment(path: &Path, cx: &mut App) {
+    match cx.try_global::<AttachmentOpener>().cloned() {
+        Some(opener) => (opener.0)(path, cx),
+        None => cx.open_with_system(path),
+    }
+}
 
 /// Answers for one open Item. The editor's callbacks run on every frame, so
 /// each destination is resolved against the disk once and remembered; a
