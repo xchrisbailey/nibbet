@@ -149,6 +149,42 @@ fn cmd_click_on_an_attachment_link_opens_the_file(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn the_follow_key_opens_the_attachment_link_or_image_at_the_caret(cx: &mut TestAppContext) {
+    let opened = stub_opener(cx);
+    let f = open_plan(cx, "[report](plan/report.pdf)\n\n![txt](plan/notes.txt)\n");
+    let folder = f.data_root.join("personal/notes/plan");
+    let press = |cx: &mut TestAppContext, keys: &str| {
+        cx.update_window(f.window, |_, window, cx| {
+            window.render_frame(cx);
+            for key in keys.split_whitespace() {
+                window.press(key, cx);
+            }
+        })
+        .unwrap();
+        cx.run_until_parked();
+    };
+    // A plain click puts the caret in the link; nothing opens by itself.
+    cmd_click_body(cx, &f, 60.);
+    opened.borrow_mut().clear();
+    cx.update_window(f.window, |_, window, cx| {
+        let body = window.find("note-body").bounds();
+        let at = body.origin + gpui_kit::point(gpui_kit::px(60.), gpui_kit::px(24.));
+        window.pointer_down(at, MouseButton::Left, cx);
+        window.pointer_up(at, MouseButton::Left, cx);
+    })
+    .unwrap();
+    assert!(opened.borrow().is_empty());
+    press(cx, "cmd-alt-enter");
+    assert_eq!(*opened.borrow(), [folder.join("report.pdf")]);
+
+    // The image, selected as the only thing on its line.
+    opened.borrow_mut().clear();
+    press(cx, "secondary-down shift-left");
+    press(cx, "cmd-alt-enter");
+    assert_eq!(*opened.borrow(), [folder.join("notes.txt")]);
+}
+
+#[gpui_kit::test]
 fn cmd_click_on_a_missing_attachment_posts_a_notice(cx: &mut TestAppContext) {
     let opened = stub_opener(cx);
     let f = open_plan(cx, "[report](plan/gone.pdf)\n");

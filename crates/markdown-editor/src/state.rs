@@ -1997,7 +1997,9 @@ impl BlockEditorState {
 
     /// FORK: the keyboard route to following a Link: emit
     /// [`BlockEditorEvent::WikiLinkClicked`] for the one the caret is in or
-    /// touches. Elsewhere the key passes on.
+    /// touches. Failing that, a link or image the caret is in, next to or
+    /// has selected emits [`BlockEditorEvent::LinkClicked`] as Cmd/Ctrl-click
+    /// does. Elsewhere the key passes on.
     pub(crate) fn on_follow_wiki_link(
         &mut self,
         _: &FollowWikiLink,
@@ -2009,8 +2011,26 @@ impl BlockEditorState {
                 slug: chip.slug.into(),
                 heading: chip.heading,
             }),
-            None => cx.propagate(),
+            None => match self.link_at_caret().or_else(|| self.selected_image_url()) {
+                Some(url) => cx.emit(BlockEditorEvent::LinkClicked { url }),
+                None => cx.propagate(),
+            },
         }
+    }
+
+    /// FORK: the url of the first image inside the selection.
+    fn selected_image_url(&self) -> Option<SharedString> {
+        let (block, range) = self.selected_images().into_iter().next()?;
+        self.model
+            .doc
+            .inline(block)?
+            .pieces()
+            .find_map(|(piece, _, atom)| match atom {
+                Some(super::inline::InlineAtom::Image(image)) if piece == range => {
+                    Some(image.url.to_string().into())
+                }
+                _ => None,
+            })
     }
 
     /// FORK: Cmd/Ctrl+click: emit [`BlockEditorEvent::WikiLinkClicked`] for
