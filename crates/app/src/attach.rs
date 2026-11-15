@@ -3,11 +3,12 @@
 //! This is the copying and the Markdown; `ItemEditor` runs it off the UI
 //! thread and puts the result in the body.
 
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{ClipboardEntry, ClipboardItem};
-use sett_store::{AttachmentItem, Space, Store};
+use sett_store::{AttachmentItem, Resolved, Space, Store};
 
 /// Something to attach.
 #[derive(Debug, Clone)]
@@ -198,6 +199,68 @@ fn escape(text: &str) -> String {
         out.push(c);
     }
     out
+}
+
+/// Markdown whose Attachments were copied into another Item's folder.
+#[derive(Debug, Default)]
+pub(crate) struct Carried {
+    /// The Markdown with its destinations pointed at the copies.
+    pub(crate) markdown: String,
+    failed: Vec<(String, io::Error)>,
+}
+
+impl Carried {
+    /// The error notice for what couldn't be copied, or `None` when all was.
+    pub(crate) fn notice(&self) -> Option<String> {
+        let (_, first) = self.failed.first()?;
+        let names = self
+            .failed
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let reason = first.to_string();
+        let reason = reason.trim_end_matches('.');
+        Some(format!("Couldn\u{2019}t copy {names}. {reason}."))
+    }
+}
+
+/// Copies the files `markdown` links to relative to the Item `from` into the
+/// Item `to`, and points those links at the copies. Blocking.
+///
+/// A destination that isn't a file there (a web link, a missing file, a path
+/// outside the Space) stays as written, so the text still reads as it did. A
+/// file that can't be copied also stays as written, and is reported.
+pub(crate) fn carry(
+    store: &Store,
+    from: (Space, &AttachmentItem),
+    to: (Space, &AttachmentItem),
+    markdown: &str,
+) -> Carried {
+    let mut failed = Vec::new();
+    // One copy per file however often the text links to it.
+    let mut done: HashMap<String, Option<String>> = HashMap::new();
+    let markdown = markdown_editor::map_destinations(markdown, |destination| {
+        done.entry(destination.to_string())
+            .or_insert_with(|| {
+                let Resolved::Found(path) = store.resolve_attachment(from.0, from.1, destination)
+                else {
+                    return None;
+                };
+                if !path.is_file() {
+                    return None;
+                }
+                match store.attach_file(to.0, to.1, &path) {
+                    Ok(attached) => Some(attached.destination),
+                    Err(err) => {
+                        failed.push((file_name(&path), err));
+                        None
+                    }
+                }
+            })
+            .clone()
+    });
+    Carried { markdown, failed }
 }
 
 /// `markdown` with its links into the folder `old/` pointed at `new/`, for

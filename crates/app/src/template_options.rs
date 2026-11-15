@@ -6,9 +6,11 @@ use sett_store::Template;
 /// The id the Insert Menu's Attachment option reports when picked.
 pub(crate) const ATTACHMENT: &str = "attachment";
 
-/// The block types, then the Attachment picker, then one row per Template (already sorted by title). A
-/// Template's body never carries frontmatter, so nothing but the body is
-/// inserted.
+/// The id prefix a Template row reports when picked, followed by its slug.
+pub(crate) const TEMPLATE_PREFIX: &str = "template:";
+
+/// The block types, then the Attachment picker, then one row per Template (already sorted by title). Picking a
+/// Template row is the host's to handle, so its Attachments come along.
 pub(crate) fn insert_options(templates: &[Template]) -> Vec<InsertMenuOption> {
     let mut options = InsertMenuOption::defaults();
     options.push(
@@ -18,7 +20,7 @@ pub(crate) fn insert_options(templates: &[Template]) -> Vec<InsertMenuOption> {
     options.extend(templates.iter().map(|t| {
         InsertMenuOption::new(
             t.title.clone(),
-            EditorCommand::InsertMarkdown(t.body.clone().into()),
+            EditorCommand::Host(format!("{TEMPLATE_PREFIX}{}", t.slug).into()),
         )
         .aliases(["template"])
         .section("Templates")

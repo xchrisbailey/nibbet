@@ -28,7 +28,18 @@ use crate::attachments::{Attachments, Open};
 use crate::dates::to_chrono;
 use crate::item_links::ItemLinks;
 use crate::notice::frontmatter_notice;
-use crate::template_options::ATTACHMENT;
+use crate::template_options::{ATTACHMENT, TEMPLATE_PREFIX};
+
+/// The last text copied or cut from a block editor, and the Item it came
+/// from, app-wide. A paste of the same text into another Item brings the
+/// source's Attachments along (ADR 0004).
+struct CopiedFrom {
+    text: String,
+    space: Space,
+    item: AttachmentItem,
+}
+
+impl gpui_kit::Global for CopiedFrom {}
 
 pub(crate) struct OpenInsertMenuOnLoad;
 
@@ -269,6 +280,12 @@ impl ItemEditor {
                     }
                     BlockEditorEvent::InsertMenuHost { id } if id.as_ref() == ATTACHMENT => {
                         this.pick_attachments(window, cx);
+                    }
+                    BlockEditorEvent::InsertMenuHost { id } if id.starts_with(TEMPLATE_PREFIX) => {
+                        this.use_template(&id[TEMPLATE_PREFIX.len()..], window, cx);
+                    }
+                    BlockEditorEvent::Copied { text, markdown } => {
+                        this.remember_copy(text, *markdown, cx);
                     }
                     BlockEditorEvent::CreateLinkTargetRequested { title } => {
                         this.create_link_target(title, block, window, cx);
@@ -732,12 +749,157 @@ impl ItemEditor {
     ) {
         let sources = Source::from_clipboard(item);
         if sources.is_empty() {
+            if let Some(text) = item.text()
+                && self.carry_paste(&request, &text, window, cx)
+            {
+                return;
+            }
             self.block.update(cx, |block, cx| {
                 block.apply_paste(&request, item.text().as_deref(), cx);
             });
             return;
         }
         self.attach(sources, Some(request), item.text(), window, cx);
+    }
+
+    /// Remembers a copy or cut in the block view, or forgets the last one
+    /// when it was raw code (which is never rewritten). A cut leaves the
+    /// source's files where they are.
+    fn remember_copy(&mut self, text: &str, markdown: bool, cx: &mut Context<Self>) {
+        match &self.target {
+            Some(target) if markdown => cx.set_global(CopiedFrom {
+                text: text.to_string(),
+                space: target.space(),
+                item: target.attachment_item(),
+            }),
+            _ => {
+                if cx.has_global::<CopiedFrom>() {
+                    cx.remove_global::<CopiedFrom>();
+                }
+            }
+        }
+    }
+
+    /// A paste of text copied from another Item: copies the files it links
+    /// to into this Item's folder (off the UI thread) and pastes the text
+    /// pointing at the copies, as one undo step. Returns false, having done
+    /// nothing, when the text isn't that: from outside sett, or from this
+    /// same Item.
+    fn carry_paste(
+        &mut self,
+        request: &PasteRequest,
+        text: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(target) = self.target.clone() else {
+            return false;
+        };
+        let Some(from) = cx
+            .try_global::<CopiedFrom>()
+            .filter(|from| from.text == text)
+            .map(|from| (from.space, from.item.clone()))
+        else {
+            return false;
+        };
+        if from == (target.space(), target.attachment_item()) || self.locked() {
+            return false;
+        }
+        let store = self.model.read(cx).store();
+        let (to_space, to_item) = (target.space(), target.attachment_item());
+        let (text, request) = (text.to_string(), request.clone());
+        cx.spawn_in(window, async move |this, cx| {
+            let carried = cx
+                .background_spawn(async move {
+                    attach::carry(&store, (from.0, &from.1), (to_space, &to_item), &text)
+                })
+                .await;
+            this.update_in(cx, |this, window, cx| {
+                this.carried(&target, carried, &request, window, cx);
+            })
+            .ok();
+        })
+        .detach();
+        true
+    }
+
+    fn carried(
+        &mut self,
+        target: &EditorTarget,
+        carried: attach::Carried,
+        request: &PasteRequest,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(notice) = carried.notice() {
+            window.push_notification(Notification::error(notice), cx);
+        }
+        // The files are written either way; text pasted into another Item
+        // would point at the wrong folder.
+        if self.target.as_ref() != Some(target) {
+            return;
+        }
+        self.refresh_attachments(window, cx);
+        self.block.update(cx, |block, cx| {
+            // A stale paste is not refused: the text goes in at the caret as
+            // it is now.
+            if !block.apply_paste(request, Some(&carried.markdown), cx) {
+                block.insert_markdown(&carried.markdown, cx);
+            }
+        });
+    }
+
+    /// An Insert Menu Template row: copies the files its body links to into
+    /// this Item's folder, then inserts the body in the empty block the menu
+    /// left, as one undo step.
+    fn use_template(&mut self, slug: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(target) = self.target.clone() else {
+            return;
+        };
+        let Some(template) = self.model.read(cx).template(slug).cloned() else {
+            return;
+        };
+        if self.locked() {
+            return;
+        }
+        let store = self.model.read(cx).store();
+        let (to_space, to_item) = (target.space(), target.attachment_item());
+        let from = AttachmentItem::from(&template);
+        cx.spawn_in(window, async move |this, cx| {
+            let carried = cx
+                .background_spawn(async move {
+                    attach::carry(
+                        &store,
+                        (template.space, &from),
+                        (to_space, &to_item),
+                        &template.body,
+                    )
+                })
+                .await;
+            this.update_in(cx, |this, window, cx| {
+                this.template_carried(&target, carried, window, cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn template_carried(
+        &mut self,
+        target: &EditorTarget,
+        carried: attach::Carried,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(notice) = carried.notice() {
+            window.push_notification(Notification::error(notice), cx);
+        }
+        if self.target.as_ref() != Some(target) {
+            return;
+        }
+        self.refresh_attachments(window, cx);
+        self.block
+            .update(cx, |block, cx| block.insert_markdown(&carried.markdown, cx));
     }
 
     /// The Insert Menu's Attachment option: asks for files, then attaches

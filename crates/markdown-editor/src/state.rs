@@ -447,6 +447,14 @@ pub enum BlockEditorEvent {
     /// Enter requested submission; emitted only outside IME composition. The
     /// owner applies completion/picker and domain-send policy, in that order.
     SubmitRequested,
+    /// FORK: the editor put `text` on the clipboard (a copy or a cut).
+    /// `markdown` is whether it is the editor's own Markdown copy (inline
+    /// or blocks) rather than raw code, so the host can tell later whether a
+    /// paste is this text coming back.
+    Copied {
+        text: SharedString,
+        markdown: bool,
+    },
     /// Semantic paste interception, shared by keyboard and native actions.
     /// The owner must resolve this request with `apply_paste`; stale requests
     /// are rejected instead of pasting into a later selection/document.
@@ -2935,9 +2943,15 @@ impl BlockEditorState {
         if text.is_empty() {
             return;
         }
+        let markdown = matches!(kind, CopyKind::Inline | CopyKind::Blocks);
         cx.write_to_clipboard(match kind.tag() {
-            Some(tag) => ClipboardItem::new_string_with_metadata(text, tag),
-            None => ClipboardItem::new_string(text),
+            Some(tag) => ClipboardItem::new_string_with_metadata(text.clone(), tag),
+            None => ClipboardItem::new_string(text.clone()),
+        });
+        // FORK: lets the host remember where the text came from.
+        cx.emit(BlockEditorEvent::Copied {
+            text: text.into(),
+            markdown,
         });
     }
     pub(crate) fn on_cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {

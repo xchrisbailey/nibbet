@@ -300,7 +300,10 @@ fn picking_a_template_replaces_the_slash_with_its_body(cx: &mut TestAppContext) 
         saved_body(cx, &path),
         "First line\n\n## Yesterday\n\nDone\n"
     );
-    // One undo restores the typed text.
+    // One undo takes the body back; the host row had already cleared the
+    // typed text, so a second restores it.
+    press(cx, &f, "secondary-z");
+    assert_eq!(saved_body(cx, &path), "First line\n\n\n");
     press(cx, &f, "secondary-z");
     assert_eq!(saved_body(cx, &path), "First line\n\n/stand\n");
 }
