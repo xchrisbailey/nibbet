@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use notify::{RecursiveMode, Watcher as _};
 
-use crate::{Change, Date, Space};
+use crate::{AttachmentOwner, Change, Date, Space};
 
 /// How long to gather raw events before reporting, so one save that fires
 /// several events reaches the caller once. Well under the 1 s target.
@@ -188,7 +188,9 @@ fn forward(
 }
 
 /// Maps a path inside a Space folder to what it holds, using the layout from
-/// ADR 0001. Hidden files (editor swap and temp files) are ignored.
+/// ADR 0001. Hidden files (editor swap and temp files) are ignored. A name
+/// without `.md` where an Item file would be is an Item's Attachment folder
+/// (ADR 0004).
 fn classify(rel: &Path) -> Option<Change> {
     let parts: Vec<&str> = rel
         .components()
@@ -197,29 +199,84 @@ fn classify(rel: &Path) -> Option<Change> {
     match parts.as_slice() {
         [] | ["projects"] | ["notes"] | ["journal"] => Some(Change::All),
         ["templates"] => Some(Change::Templates),
-        ["templates", f] => Some(Change::Template(md_stem(f)?.to_string())),
+        ["templates", f, rest @ ..] => entry(f, rest, Change::Template, AttachmentOwner::Template),
         ["projects", p, rest @ ..] if visible(p) => {
             let project = p.to_string();
             match rest {
                 [] | ["project.md"] | ["tasks"] | ["notes"] => Some(Change::Project(project)),
-                ["tasks", f] => Some(Change::Task {
-                    project,
-                    slug: md_stem(f)?.to_string(),
-                }),
-                ["notes", f] => Some(Change::Note {
-                    project: Some(project),
-                    slug: md_stem(f)?.to_string(),
-                }),
+                ["tasks", f, rest @ ..] => entry(
+                    f,
+                    rest,
+                    |slug| Change::Task {
+                        project: project.clone(),
+                        slug,
+                    },
+                    |slug| AttachmentOwner::Task {
+                        project: project.clone(),
+                        slug,
+                    },
+                ),
+                ["notes", f, rest @ ..] => entry(
+                    f,
+                    rest,
+                    |slug| Change::Note {
+                        project: Some(project.clone()),
+                        slug,
+                    },
+                    |slug| AttachmentOwner::Note {
+                        project: Some(project.clone()),
+                        slug,
+                    },
+                ),
                 _ => None,
             }
         }
-        ["notes", f] => Some(Change::Note {
-            project: None,
-            slug: md_stem(f)?.to_string(),
-        }),
-        ["journal", f] => Some(Change::Journal(Date::parse(md_stem(f)?)?)),
+        ["notes", f, rest @ ..] => entry(
+            f,
+            rest,
+            |slug| Change::Note {
+                project: None,
+                slug,
+            },
+            |slug| AttachmentOwner::Note {
+                project: None,
+                slug,
+            },
+        ),
+        ["journal", f, rest @ ..] => match f.strip_suffix(".md") {
+            Some(stem) if rest.is_empty() => Some(Change::Journal(Date::parse(stem)?)),
+            Some(_) => None,
+            None => attachment(AttachmentOwner::Journal(Date::parse(f)?), f, rest),
+        },
         _ => None,
     }
+}
+
+/// What an entry named `name` below a `tasks/`, `notes/` or `templates/`
+/// folder is: the Item's file (`file` builds its change from the slug), or
+/// something in its Attachment folder (`owner` builds who owns it).
+fn entry(
+    name: &str,
+    rest: &[&str],
+    file: impl FnOnce(String) -> Change,
+    owner: impl FnOnce(String) -> AttachmentOwner,
+) -> Option<Change> {
+    match md_stem(name) {
+        Some(slug) if rest.is_empty() => Some(file(slug.to_string())),
+        Some(_) => None,
+        None => attachment(owner(name.to_string()), name, rest),
+    }
+}
+
+/// The Attachment change for `folder` (the Item's slug) and the path below it.
+fn attachment(item: AttachmentOwner, folder: &str, rest: &[&str]) -> Option<Change> {
+    if !visible(folder) || !rest.iter().all(|part| visible(part)) {
+        return None;
+    }
+    Some(Change::Attachment {
+        item,
+        file: (!rest.is_empty()).then(|| rest.join("/")),
+    })
 }
 
 fn md_stem(name: &str) -> Option<&str> {

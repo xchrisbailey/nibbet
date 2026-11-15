@@ -1045,3 +1045,58 @@ fn a_pasted_top_level_callout_marker_becomes_a_callout() {
     assert!(m.paste_blocks_markdown("> [!NOTE]\n> hi\n\nafter").unwrap());
     assert_eq!(m.source(), "> [!NOTE]\n> hi\n\nafter");
 }
+
+// FORK: the host inserts Markdown at the caret (Attachments).
+
+#[test]
+fn host_option_empties_the_block_and_two_images_insert_as_one_undo_step() {
+    let typed = "before\n\n/att\n\nafter";
+    let mut m = model(typed);
+    let pos = caret_in(&mut m, 1, 4);
+    m.apply_insert_option(pos.block, EditorCommand::Host("attach".into()));
+    // Only the typed `/query` went; the caret waits in the empty block.
+    assert_eq!(m.doc().leaf_text(pos.block), Some(""));
+    assert_eq!(m.caret().map(|c| c.block), Some(pos.block));
+    let before_insert = m.revision();
+    assert!(
+        m.insert_markdown_at_caret("![a](a.png)\n\n![b](b.png)")
+            .unwrap()
+    );
+    assert_eq!(m.source(), "before\n\n![a](a.png)\n\n![b](b.png)\n\nafter");
+    assert!(m.undo());
+    assert_eq!(m.doc().leaf_text(pos.block), Some(""));
+    assert_eq!(m.source().matches("![").count(), 0);
+    assert_ne!(m.revision(), before_insert);
+}
+
+#[test]
+fn insert_markdown_at_the_caret_puts_one_image_inline() {
+    let mut m = model("a b");
+    caret_in(&mut m, 0, 2);
+    assert!(m.insert_markdown_at_caret("![x](x.png)").unwrap());
+    assert_eq!(m.source(), "a ![x](x.png)b");
+}
+
+// FORK: blocks inserted as their own paragraphs (Attachments).
+
+#[test]
+fn inserting_blocks_mid_paragraph_splits_it_around_them() {
+    let mut m = model("a b");
+    caret_in(&mut m, 0, 2);
+    assert!(
+        m.insert_markdown_blocks_at_caret("![x](x.png)\n\n![y](y.png)")
+            .unwrap()
+    );
+    assert_eq!(m.source(), "a \n\n![x](x.png)\n\n![y](y.png)\n\nb");
+    assert!(m.undo());
+    assert_eq!(m.source(), "a b");
+}
+
+#[test]
+fn inserting_blocks_in_an_empty_paragraph_fills_it() {
+    let mut m = model("before\n\n/x\n\nafter");
+    let pos = caret_in(&mut m, 1, 2);
+    m.apply_insert_option(pos.block, EditorCommand::Host("attach".into()));
+    assert!(m.insert_markdown_blocks_at_caret("![x](x.png)").unwrap());
+    assert_eq!(m.source(), "before\n\n![x](x.png)\n\nafter");
+}

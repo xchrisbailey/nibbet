@@ -2,6 +2,8 @@
 //! built on `sett-store`.
 
 mod app_model;
+mod attach;
+mod attachments;
 mod board;
 mod center;
 mod confirm_delete;
@@ -22,6 +24,7 @@ mod template_options;
 mod templates;
 
 pub use app_model::{AppModel, AppModelEvent, Selection};
+pub use attachments::AttachmentOpener;
 pub use board::BoardEvent;
 pub use icons::AppAssets;
 pub use shell::{

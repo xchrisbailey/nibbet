@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use async_channel::Receiver;
-use sett_store::{Change, Date, JournalEntry, Space, Store};
+use sett_store::{AttachmentOwner, Change, Date, JournalEntry, Space, Store};
 
 /// FSEvents latency varies, so wait up to a bound rather than a fixed sleep.
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -207,4 +207,52 @@ fn outside_edit_after_own_write_is_still_reported() {
         "---\ntitle: Agent edit\n---\n",
     );
     collect_until(&rx, &[task("inbox", &t.slug)]);
+}
+
+#[test]
+fn files_in_an_items_attachment_folder_are_reported() {
+    let (_dir, store) = new_store();
+    let root = store.root().to_path_buf();
+    write(
+        &root,
+        "work/projects/inbox/tasks/fix-login.md",
+        "---\ntitle: Fix\n---\n",
+    );
+    let watcher = store.watch(Space::Work).unwrap();
+    let rx = watcher.events();
+
+    write(&root, "work/projects/inbox/tasks/fix-login/shot.png", "x");
+    write(
+        &root,
+        "work/projects/inbox/tasks/fix-login/.hidden.tmp",
+        "x",
+    );
+    write(&root, "work/journal/2026-11-14/a.pdf", "x");
+    write(&root, "work/templates/bug/b.png", "x");
+
+    let attachment = |item, file: &str| Change::Attachment {
+        item,
+        file: Some(file.to_string()),
+    };
+    let seen = collect_until(
+        &rx,
+        &[
+            attachment(
+                AttachmentOwner::Task {
+                    project: "inbox".into(),
+                    slug: "fix-login".into(),
+                },
+                "shot.png",
+            ),
+            attachment(
+                AttachmentOwner::Journal(Date::parse("2026-11-14").unwrap()),
+                "a.pdf",
+            ),
+            attachment(AttachmentOwner::Template("bug".into()), "b.png"),
+        ],
+    );
+    assert!(!seen.iter().any(|c| matches!(
+        c,
+        Change::Attachment { file: Some(f), .. } if f.starts_with('.')
+    )));
 }

@@ -61,6 +61,11 @@ pub enum EditorCommand {
     /// the editor's own block paste does. Top level only, like
     /// `InsertCallout`.
     InsertMarkdown(SharedString),
+    /// FORK: an Insert Menu option the host handles. Running it changes
+    /// nothing; picking it from the menu leaves the caret in the emptied
+    /// block and emits `BlockEditorEvent::InsertMenuHost { id }`. Top level
+    /// only, like `InsertMarkdown`.
+    Host(SharedString),
 }
 
 #[non_exhaustive]
@@ -1088,6 +1093,18 @@ impl BlockEditorModel {
     }
 
     fn paste_block_markdown(&mut self, text: &str, own: bool) -> Result<bool, CommandError> {
+        self.paste_block_markdown_as(text, own, false)
+    }
+
+    /// `separate` keeps the pasted paragraphs whole: the caret's paragraph
+    /// is split around them rather than their first and last being merged
+    /// into the text before and after the caret.
+    fn paste_block_markdown_as(
+        &mut self,
+        text: &str,
+        own: bool,
+        separate: bool,
+    ) -> Result<bool, CommandError> {
         // Single-line text is plain unless it holds an inline atom's
         // Markdown (a copied image), which pastes back as the atom, or an
         // inline code span (`x`), which pastes back as code.
@@ -1169,14 +1186,21 @@ impl BlockEditorModel {
                 delete_range(tx, range)?
             };
             let mut blocks = blocks;
-            let head = blocks.first().and_then(paragraph_inline);
+            // FORK: `separate` merges nothing into the halves.
+            let head = blocks
+                .first()
+                .and_then(paragraph_inline)
+                .filter(|_| !separate);
             if head.is_some() {
                 blocks.remove(0);
             }
             let tail = if blocks.is_empty() {
                 None
             } else {
-                blocks.last().and_then(paragraph_inline)
+                blocks
+                    .last()
+                    .and_then(paragraph_inline)
+                    .filter(|_| !separate)
             };
             if tail.is_some() {
                 blocks.pop();
@@ -1392,6 +1416,7 @@ impl BlockEditorModel {
             EditorCommand::SetCallout(kind) => self.set_callout(kind),
             EditorCommand::InsertCallout(kind) => self.insert_callout(kind),
             EditorCommand::InsertMarkdown(text) => self.insert_markdown(&text),
+            EditorCommand::Host(_) => Ok(false),
             EditorCommand::MoveBlocks { down } => self.move_blocks(down),
             EditorCommand::InsertBlock(BlockKind::HorizontalRule) => {
                 let pos = self
@@ -1792,6 +1817,32 @@ impl BlockEditorModel {
                 .index_in_parent(pos.block)
                 .is_some_and(|(parent, _)| parent == self.doc.root)
         })
+    }
+
+    /// FORK: insert `text` at the caret the way the editor's own block paste
+    /// does (blocks, marks and images kept), with no clipboard round-trip. It
+    /// is one undo step however many blocks it holds. Where blocks can't go
+    /// (a table cell), the text goes in raw. Returns whether anything changed.
+    pub(crate) fn insert_markdown_at_caret(&mut self, text: &str) -> Result<bool, CommandError> {
+        if self.paste_block_markdown(text, true)? {
+            return Ok(true);
+        }
+        self.insert_text(text, EditOrigin::Paste)?;
+        Ok(true)
+    }
+
+    /// FORK: like `insert_markdown_at_caret`, but every pasted block stays a
+    /// block of its own: a paragraph at the caret is split around them (an
+    /// empty one is filled), so an image never lands inside other text.
+    pub(crate) fn insert_markdown_blocks_at_caret(
+        &mut self,
+        text: &str,
+    ) -> Result<bool, CommandError> {
+        if self.paste_block_markdown_as(text, true, true)? {
+            return Ok(true);
+        }
+        self.insert_text(text, EditOrigin::Paste)?;
+        Ok(true)
     }
 
     fn insert_markdown(&mut self, text: &str) -> Result<bool, CommandError> {

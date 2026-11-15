@@ -1901,6 +1901,26 @@ fn d14_hover_and_secondary_click_on_link(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn secondary_click_on_an_image_emits_link_clicked_with_its_destination(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "a![pic](dir/x.png)b");
+    let log = event_log(&editor, cx);
+    let on = first_line_point(&editor, cx, 0, px(12.));
+    let urls = || -> Vec<gpui::SharedString> {
+        log.borrow()
+            .iter()
+            .filter_map(|e| match e {
+                crate::BlockEditorEvent::LinkClicked { url } => Some(url.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    cx.simulate_click(on, Modifiers::none());
+    assert!(urls().is_empty());
+    cx.simulate_click(on, secondary_modifier());
+    assert_eq!(urls(), vec![gpui::SharedString::from("dir/x.png")]);
+}
+
+#[gpui::test]
 fn d14_cmd_k_requests_popover_and_set_link_edits(cx: &mut TestAppContext) {
     let (editor, cx) = open(cx, "hello world");
     let log = event_log(&editor, cx);
@@ -4480,4 +4500,490 @@ fn a_long_menu_is_capped_and_scrolls(cx: &mut TestAppContext) {
     draw(cx);
     let row = cx.update(|window, _| window.find_by_label("Template 29").bounds());
     assert!(menu.contains(&row.center()), "{row:?} outside {menu:?}");
+}
+
+const PNG_30X20: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAUCAIAAAAVyRqTAAAAHUlEQVR4nGNooBlgGDV61OhRo0eNHjV61OihaDQA+o2ELgHZadsAAAAASUVORK5CYII=";
+
+/// Opens an editor the host has configured before its first frame, with a
+/// fake HTTP client that counts requests.
+fn open_hosted<'a>(
+    cx: &'a mut TestAppContext,
+    source: &str,
+    configure: impl FnOnce(&mut BlockEditorState, &mut Context<BlockEditorState>) + 'static,
+) -> (
+    Entity<BlockEditorState>,
+    &'a mut VisualTestContext,
+    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+) {
+    use std::sync::{Arc, atomic::AtomicUsize};
+    let requests = Arc::new(AtomicUsize::new(0));
+    let count = requests.clone();
+    cx.update(|cx| {
+        cx.set_http_client(gpui::http_client::FakeHttpClient::create(move |_| {
+            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async { Err(anyhow::anyhow!("fake client: outbound loading forbidden")) }
+        }));
+        crate::init_for_tests(cx);
+    });
+    let source = source.to_string();
+    let (root, cx) = cx.add_window_view(move |window, cx| {
+        Root(cx.new(|cx| {
+            let mut state = BlockEditorState::new(window, cx).with_source(&source);
+            configure(&mut state, cx);
+            state
+        }))
+    });
+    let editor = root.read_with(cx, |root, _| root.0.clone());
+    cx.update(|window, cx| {
+        let focus = editor.read(cx).focus_handle.clone();
+        window.focus(&focus, cx);
+    });
+    draw(cx);
+    (editor, cx, requests)
+}
+
+/// Width of the first leaf's atom at `offset`, as drawn.
+fn atom_width(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+    offset: usize,
+) -> Pixels {
+    draw(cx);
+    editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        let f = e.frame.borrow();
+        let leaf = f.leaf(id).unwrap();
+        leaf.caret_point(offset + 3).x - leaf.caret_point(offset).x
+    })
+}
+
+#[gpui::test]
+fn host_image_display_load_gets_the_raw_destination_and_its_source_is_used(
+    cx: &mut TestAppContext,
+) {
+    use crate::ImageDisplay;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
+    let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+    let loaded = Arc::new(AtomicBool::new(false));
+    let (seen, flag) = (asked.clone(), loaded.clone());
+    let initial = "![shot](fix-login/my%20shot.png)";
+    let (editor, cx, requests) = open_hosted(cx, initial, move |state, cx| {
+        state.set_image_display(
+            Arc::new(move |url| {
+                seen.lock().unwrap().push(url.to_string());
+                let flag = flag.clone();
+                ImageDisplay::Load(gpui::ImageSource::Custom(Arc::new(move |_, _| {
+                    flag.store(true, Ordering::SeqCst);
+                    None
+                })))
+            }),
+            cx,
+        );
+    });
+    draw(cx);
+    assert!(
+        asked
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|url| url == "fix-login/my%20shot.png")
+    );
+    assert!(!asked.lock().unwrap().is_empty());
+    assert!(
+        loaded.load(Ordering::SeqCst),
+        "gpui loaded the host's source"
+    );
+    assert_eq!(source(&editor, cx), initial);
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+}
+
+#[gpui::test]
+fn host_image_display_placeholder_draws_a_chip_and_keeps_the_source(cx: &mut TestAppContext) {
+    use crate::ImageDisplay;
+    use std::sync::{Arc, atomic::Ordering};
+    let initial = "a ![shot](https://attacker.example/x.png) b\n\n| t |\n| --- |\n| ![cell](https://attacker.example/c.png) |";
+    let (editor, cx, requests) = open_hosted(cx, initial, |state, cx| {
+        state.set_image_display(
+            Arc::new(|url| ImageDisplay::Placeholder {
+                icon: "globe".into(),
+                text: format!("Not loaded: {url}").into(),
+            }),
+            cx,
+        );
+    });
+    let chip = cx.update(|window, _| {
+        window
+            .find_by_label("Not loaded: https://attacker.example/x.png")
+            .bounds()
+    });
+    assert!(chip.size.width > px(40.), "{chip:?}");
+    assert_eq!(source(&editor, cx), initial);
+    editor.read_with(cx, |state, _| {
+        let atoms = state
+            .model()
+            .document()
+            .leaves()
+            .map(|leaf| {
+                state
+                    .model()
+                    .doc()
+                    .inline(leaf.id())
+                    .map_or(0, |text| text.atoms().len())
+            })
+            .sum::<usize>();
+        assert_eq!(atoms, 2, "the images stay atoms in the document");
+    });
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+}
+
+#[gpui::test]
+fn host_image_display_keeps_data_urls_rendering(cx: &mut TestAppContext) {
+    use crate::ImageDisplay;
+    use std::sync::{Arc, Mutex};
+    let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+    let seen = asked.clone();
+    let initial = format!("![d]({PNG_30X20})");
+    let (editor, cx, requests) = open_hosted(cx, &initial, move |state, cx| {
+        state.set_image_display(
+            Arc::new(move |url| {
+                seen.lock().unwrap().push(url.to_string());
+                ImageDisplay::Placeholder {
+                    icon: "image-off".into(),
+                    text: "no".into(),
+                }
+            }),
+            cx,
+        );
+    });
+    // Decoding runs on the background executor.
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(10));
+    draw(cx);
+    assert!(
+        asked.lock().unwrap().is_empty(),
+        "data: never reaches the host"
+    );
+    // 30pt of image and a 1px border each side.
+    assert_eq!(atom_width(&editor, cx, 0), px(32.));
+    assert_eq!(source(&editor, cx), initial);
+    assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[gpui::test]
+fn host_link_decoration_adds_a_paperclip_and_leaves_the_source_alone(cx: &mut TestAppContext) {
+    use crate::LinkDecoration;
+    use std::sync::Arc;
+    let initial = "see [report](fix-login/report.pdf) and [gone](fix-login/gone.pdf) and [web](https://example.test)";
+    let (editor, cx, _) = open_hosted(cx, initial, |state, cx| {
+        state.set_link_decoration(
+            Arc::new(|url| match url {
+                "fix-login/report.pdf" => LinkDecoration::Attachment,
+                "fix-login/gone.pdf" => LinkDecoration::MissingAttachment,
+                _ => LinkDecoration::None,
+            }),
+            cx,
+        );
+    });
+    assert_eq!(source(&editor, cx), initial);
+    // One paperclip per decorated link, none for the plain one.
+    let clips = cx.update(|window, _| window.find_all_by_label("Attachment").len());
+    assert_eq!(clips, 2);
+    // Offsets still address the model's text: a caret inside "report" sits
+    // right of the paperclip, and typing there edits the right place.
+    // The model text is "see report and …": "report" is bytes 4..10.
+    caret_at(&editor, cx, 0, 8);
+    type_text(cx, "X");
+    assert_eq!(
+        source(&editor, cx),
+        initial.replacen("report]", "repoXrt]", 1)
+    );
+}
+
+#[gpui::test]
+fn a_selected_image_reports_its_box_for_the_ring(cx: &mut TestAppContext) {
+    let initial = format!("ab![d]({PNG_30X20})cd");
+    let (editor, cx, _) = open_hosted(cx, &initial, |_, _| {});
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(10));
+    draw(cx);
+    assert!(editor.read_with(cx, |e, _| e.selected_images()).is_empty());
+    editor.update(cx, |e, cx| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        e.set_selection(
+            BlockSelection::Text {
+                anchor: BlockPosition::new(id, 2),
+                head: BlockPosition::new(id, 5),
+            },
+            cx,
+        )
+        .unwrap();
+    });
+    draw(cx);
+    let (selected, bounds) = editor.read_with(cx, |e, _| {
+        let selected = e.selected_images();
+        let id = e.model().document().leaves().next().unwrap().id();
+        let bounds = e.frame.borrow().leaf(id).unwrap().atom_bounds(2..5);
+        (selected, bounds)
+    });
+    assert_eq!(selected.len(), 1);
+    let bounds = bounds.expect("the image is laid out");
+    assert_eq!((bounds.size.width, bounds.size.height), (px(30.), px(20.)));
+}
+
+// FORK: hooks for the host's Attachments.
+
+#[gpui::test]
+fn position_at_finds_paragraphs_cells_and_the_end(cx: &mut TestAppContext) {
+    // Leaves: a, x, y, 1, 2, b.
+    let (editor, cx) = open(cx, TABLE_DOC);
+    let leaf_id = |editor: &Entity<BlockEditorState>, cx: &VisualTestContext, ix: usize| {
+        editor.read_with(cx, |e, _| {
+            e.model().document().leaves().nth(ix).unwrap().id()
+        })
+    };
+    let position_at =
+        |editor: &Entity<BlockEditorState>, cx: &VisualTestContext, at: gpui::Point<Pixels>| {
+            editor.read_with(cx, |e, _| e.position_at(at))
+        };
+
+    let at = leaf_point(&editor, cx, 0, 1);
+    assert_eq!(
+        position_at(&editor, cx, at),
+        Some(BlockPosition::new(leaf_id(&editor, cx, 0), 1))
+    );
+    let at = leaf_point(&editor, cx, 3, 1);
+    assert_eq!(
+        position_at(&editor, cx, at).map(|p| p.block),
+        Some(leaf_id(&editor, cx, 3)),
+        "a table cell"
+    );
+    let at = leaf_point(&editor, cx, 5, 1);
+    let below = gpui::point(at.x, at.y + px(500.));
+    assert_eq!(
+        position_at(&editor, cx, below),
+        Some(BlockPosition::new(leaf_id(&editor, cx, 5), 1)),
+        "below the last block is the end of the document"
+    );
+}
+
+#[gpui::test]
+fn host_insert_option_emits_its_id_and_empties_the_block(cx: &mut TestAppContext) {
+    use std::{cell::RefCell, rc::Rc};
+    let (editor, cx) = open_with_options(
+        cx,
+        vec![crate::InsertMenuOption::new(
+            "Attach file",
+            crate::EditorCommand::Host("attach".into()),
+        )],
+    );
+    let ids = Rc::new(RefCell::new(Vec::new()));
+    let seen = ids.clone();
+    cx.update(|_, cx| {
+        cx.subscribe(&editor, move |_, event: &crate::BlockEditorEvent, _| {
+            if let crate::BlockEditorEvent::InsertMenuHost { id } = event {
+                seen.borrow_mut().push(id.to_string());
+            }
+        })
+        .detach();
+    });
+    type_text(cx, "/att");
+    assert_eq!(menu_labels(&editor, cx), ["Attach file"]);
+    keys(cx, "enter");
+    assert_eq!(*ids.borrow(), ["attach"]);
+    assert!(!editor.read_with(cx, |e, _| e.insert_menu_open()));
+    assert_eq!(source(&editor, cx), "");
+    // The host then inserts at the caret in one undo step.
+    editor.update(cx, |e, cx| {
+        e.insert_markdown("![a](a.png)\n\n![b](b.png)", cx)
+    });
+    assert_eq!(source(&editor, cx), "![a](a.png)\n\n![b](b.png)");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "");
+}
+
+#[gpui::test]
+fn host_insert_option_is_hidden_below_the_top_level(cx: &mut TestAppContext) {
+    let (editor, cx) = open_with_options(
+        cx,
+        vec![
+            crate::InsertMenuOption::new(
+                "Attach file",
+                crate::EditorCommand::Host("attach".into()),
+            ),
+            crate::InsertMenuOption::new("Task", crate::EditorCommand::ToggleTask),
+        ],
+    );
+    type_text(cx, "> /");
+    assert!(editor.read_with(cx, |e, _| e.insert_menu_open()));
+    assert_eq!(menu_labels(&editor, cx), ["Task"]);
+}
+
+// FORK: host images drawn as bordered, capped inline objects (#126).
+
+/// 100x1000 and 2000x100 solid PNGs.
+const PNG_TALL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAAPoCAIAAACnGsw9AAAFP0lEQVR42u3QMQ0AAAgDsElDGtKQhgU+niZV0HQNR1EgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWd8W6KASVwk1DigAAAAASUVORK5CYII=";
+const PNG_WIDE: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAB9AAAABkCAIAAABRpjzDAAAC/ElEQVR42u3YMQ0AAAgEsZeGNKQhDRFMJE2q4MZL1wAAAAAAAEeRAAAAAAAADHcAAAAAADDcAQAAAADAcAcAAAAAAAx3AAAAAAAw3AEAAAAAwHAHAAAAAADDHQAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAAAx3AAAAAADAcAcAAAAAAMMdAAAAAAAMdwAAAAAAMNwBAAAAAADDHQAAAAAADHcAAAAAADDcAQAAAADAcAcAAAAAAAx3AAAAAAAw3AEAAAAAwHAHAAAAAADDHQAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAADDcAQAAAADAcAcAAAAAAMMdAAAAAAAMdwAAAAAAwHAHAAAAAADDHQAAAAAADHcAAAAAADDcAQAAAAAAwx0AAAAAAAx3AAAAAAAw3AEAAAAAwHAHAAAAAAAMdwAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAADDcAQAAAADAcAcAAAAAAMMdAAAAAAAMdwAAAAAAwHAHAAAAAADDHQAAAAAADHcAAAAAADDcAQAAAAAAwx0AAAAAAAx3AAAAAAAw3AEAAAAAAMMdAAAAAAAMdwAAAAAAMNwBAAAAAMBwBwAAAAAADHcAAAAAADDcAQAAAADAcAcAAAAAAMMdAAAAAAAw3AEAAAAAwHAHAAAAAADDHQAAAAAADHcAAAAAAMBwBwAAAAAAwx0AAAAAAAx3AAAAAAAw3AEAAAAAAMMdAAAAAAAMdwAAAAAAMNwBAAAAAMBwBwAAAAAADHcAAAAAADDcAQAAAADAcAcAAAAAAMNdBQAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAADDcAQAAAADAcAcAAAAAAMMdAAAAAAAMdwAAAAAAwHAHAAAAAADDHQAAAAAADHcAAAAAADDcAQAAAAAAwx0AAAAAAAx3AAAAAAAw3AEAAAAAwHAHAAAAAAAMdwAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAADDcAQAAAADAcAcAAAAAgJ8WqFckrU/nAL0AAAAASUVORK5CYII=";
+
+/// The box of the first leaf's image atom at the model `range`, once the
+/// image decoded and the editor reflowed.
+fn image_box(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+    range: std::ops::Range<usize>,
+) -> gpui::Bounds<Pixels> {
+    for _ in 0..3 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        draw(cx);
+    }
+    editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        e.frame
+            .borrow()
+            .leaf(id)
+            .unwrap()
+            .atom_bounds(range)
+            .expect("the image is laid out")
+    })
+}
+
+/// An editor whose host loads every image (data: URLs included) itself.
+fn open_with_images<'a>(
+    cx: &'a mut TestAppContext,
+    source: &str,
+) -> (Entity<BlockEditorState>, &'a mut VisualTestContext) {
+    let (editor, cx, _) = open_hosted(cx, source, |state, cx| {
+        state.set_image_display(
+            std::sync::Arc::new(|url| {
+                crate::ImageDisplay::Load(gpui::ImageSource::Custom(std::sync::Arc::new(
+                    move |_, _| {
+                        let _ = url;
+                        None
+                    },
+                )))
+            }),
+            cx,
+        );
+    });
+    (editor, cx)
+}
+
+#[gpui::test]
+fn a_tall_image_is_capped_at_480_and_keeps_its_ratio(cx: &mut TestAppContext) {
+    let initial = format!("![t]({PNG_TALL})");
+    let (editor, cx) = open_with_images(cx, &initial);
+    let b = image_box(&editor, cx, 0..3);
+    assert_eq!(b.size.height, px(480.));
+    // 100x1000 inside a 1px border on every side.
+    let ratio = (b.size.width - px(2.)) / (b.size.height - px(2.));
+    assert!((ratio - 0.1).abs() < 0.005, "{b:?}");
+    assert_eq!(source(&editor, cx), initial);
+}
+
+#[gpui::test]
+fn a_wide_image_shrinks_to_the_wrap_width_and_keeps_its_ratio(cx: &mut TestAppContext) {
+    let initial = format!("![w]({PNG_WIDE})");
+    let (editor, cx) = open_with_images(cx, &initial);
+    let b = image_box(&editor, cx, 0..3);
+    let content = editor.read_with(cx, |e, _| e.frame.borrow().content.unwrap());
+    assert!(b.size.width <= content.size.width, "{b:?} in {content:?}");
+    assert!(b.size.width > content.size.width - px(4.), "{b:?}");
+    let ratio = (b.size.width - px(2.)) / (b.size.height - px(2.));
+    assert!((ratio - 20.).abs() < 0.5, "{b:?}");
+}
+
+#[gpui::test]
+fn a_loaded_image_selects_on_click_and_backspace_deletes_it(cx: &mut TestAppContext) {
+    let initial = format!("![w]({PNG_30X20})cd");
+    let (editor, cx) = open_with_images(cx, &initial);
+    let b = image_box(&editor, cx, 0..3);
+    cx.simulate_mouse_down(b.center(), MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(b.center(), MouseButton::Left, Modifiers::none());
+    let sel = editor.read_with(cx, |e, _| e.model().selection().clone());
+    let BlockSelection::Text { anchor, head } = sel else {
+        panic!("{sel:?}")
+    };
+    assert_eq!((anchor.offset, head.offset), (0, 3));
+    keys(cx, "backspace");
+    assert_eq!(source(&editor, cx), "cd");
+}
+
+#[gpui::test]
+fn a_failed_load_lays_out_as_the_placeholder_chip(cx: &mut TestAppContext) {
+    let initial = "![shot](fix/gone%20shot.png)";
+    let (editor, cx, requests) = open_hosted(cx, initial, |state, cx| {
+        state.set_image_display(
+            std::sync::Arc::new(|_| {
+                crate::ImageDisplay::Load(gpui::ImageSource::Custom(std::sync::Arc::new(|_, _| {
+                    Some(Err(gpui::ImageCacheError::Other(std::sync::Arc::new(
+                        anyhow::anyhow!("gone"),
+                    ))))
+                })))
+            }),
+            cx,
+        );
+    });
+    draw(cx);
+    let chip = cx.update(|window, _| window.find_by_label("gone shot.png").bounds());
+    assert!(chip.size.width > px(40.), "{chip:?}");
+    assert_eq!(source(&editor, cx), initial);
+    assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[gpui::test]
+fn an_image_still_loading_reserves_three_quarters_of_a_line(cx: &mut TestAppContext) {
+    let (editor, cx) = open_with_images(cx, "ab![w](x.png)cd");
+    let b = image_box(&editor, cx, 2..5);
+    let line = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        e.frame.borrow().leaf(id).unwrap().line_height()
+    });
+    assert!(
+        (b.size.width - line * 0.75).abs() < px(1.5),
+        "{b:?} for a line of {line:?}"
+    );
+}
+
+#[gpui::test]
+fn images_in_table_cells_keep_the_renderers_own_drawing(cx: &mut TestAppContext) {
+    let initial = format!("| t |\n| --- |\n| ![d]({PNG_30X20}) |");
+    let (editor, cx) = open_with_images(cx, &initial);
+    for _ in 0..3 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        draw(cx);
+    }
+    // 30pt wide, as the renderer draws it: no border, no object.
+    let width = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().nth(1).unwrap().id();
+        let f = e.frame.borrow();
+        let leaf = f.leaf(id).unwrap();
+        leaf.caret_point(3).x - leaf.caret_point(0).x
+    });
+    assert_eq!(width, px(30.));
+}
+
+#[gpui::test]
+fn an_image_in_a_list_item_stays_inside_its_indented_column(cx: &mut TestAppContext) {
+    let initial = format!("- ![w]({PNG_WIDE})");
+    let (editor, cx) = open_with_images(cx, &initial);
+    for _ in 0..3 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        draw(cx);
+    }
+    let (b, content) = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        let f = e.frame.borrow();
+        (
+            f.leaf(id).unwrap().atom_bounds(0..3).unwrap(),
+            f.content.unwrap(),
+        )
+    });
+    assert!(b.origin.x > content.origin.x, "indented by the marker");
+    assert!(b.right() <= content.right(), "{b:?} in {content:?}");
+    assert!(b.right() > content.right() - px(4.), "{b:?} in {content:?}");
 }

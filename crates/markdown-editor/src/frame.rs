@@ -177,11 +177,41 @@ impl LeafGeom {
         let Some(chips) = &self.info.chips else {
             return Some(rendered);
         };
-        if chips.span_at_rendered(&rendered).is_some() {
+        if chips.span_at_rendered(&rendered).is_some() || chips.icon_at_rendered(&rendered) {
             return None;
         }
         let start = chips.to_model(rendered.start);
         Some(start..start + rendered.len())
+    }
+
+    /// FORK: the box the inline atom at the model `range` is drawn in, for its
+    /// selection ring. `LeafGeometry` has no atom bounds, only which atom is
+    /// under a point, so the height is found by probing down the atom's column.
+    pub(crate) fn atom_bounds(&self, range: Range<usize>) -> Option<Bounds<Pixels>> {
+        let rendered = self.index(range.start)..self.index(range.end);
+        let left = self.geometry.position_for_index(rendered.start).x;
+        let right = self.geometry.position_for_index(rendered.end).x;
+        if right <= left {
+            return None;
+        }
+        let x = (left + right) / 2.;
+        let b = self.bounds();
+        let hit = |y: Pixels| self.geometry.atom_at(point(x, y)).as_ref() == Some(&rendered);
+        let (mut top, mut bottom) = (None::<Pixels>, None::<Pixels>);
+        let mut y = b.top();
+        while y < b.bottom() {
+            if hit(y) {
+                top.get_or_insert(y);
+                bottom = Some(y);
+            }
+            y += px(1.);
+        }
+        let (top, bottom) = (top?, bottom?);
+        let shift = self.row_shift(top);
+        Some(Bounds::new(
+            point(left + shift, top),
+            size(right - left, bottom - top + px(1.)),
+        ))
     }
 
     /// FORK: the model range of the closed Link chip drawn under `at`.

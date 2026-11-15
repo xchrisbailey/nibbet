@@ -740,3 +740,34 @@ fn escaped_callout_marker_stays_escaped_on_save() {
         assert_eq!(callout_of(&model(source), 0), None, "{source:?}");
     }
 }
+
+#[test]
+fn image_alt_text_keeps_brackets_and_backslashes() {
+    use crate::inline::InlineAtom;
+    let alts = |editor: &BlockEditorModel| -> Vec<String> {
+        editor
+            .document()
+            .leaves()
+            .flat_map(|leaf| {
+                editor
+                    .doc()
+                    .inline(leaf.id())
+                    .into_iter()
+                    .flat_map(|text| text.pieces())
+                    .filter_map(|(_, _, atom)| match atom {
+                        Some(InlineAtom::Image(image)) => {
+                            Some(image.alt.clone().unwrap_or_default().to_string())
+                        }
+                        _ => None,
+                    })
+            })
+            .collect()
+    };
+    for source in [r"![a\]b](x.png)", r"![a\[b\\c](x.png)", r"![\\](x.png)"] {
+        let initial = model(source);
+        let exported = initial.source();
+        assert_eq!(exported, source, "alt is written back as it was escaped");
+        assert_eq!(alts(&model(&exported)), alts(&initial));
+    }
+    assert_eq!(alts(&model(r"![a\]b](x.png)")), ["a]b"]);
+}

@@ -205,9 +205,14 @@ pub(crate) const CHIP_LEN: usize = 3;
 /// closed chip is [`CHIP_LEN`] bytes however long its `[[slug]]` source is.
 /// An offset inside a closed span snaps to its nearer edge. The open span, if
 /// any, is plain text and not in the map.
+///
+/// An empty span is an object the renderer draws with no text behind it (the
+/// paperclip before a decorated link). It takes [`CHIP_LEN`] bytes at its
+/// offset; the model offset there is just after it, and a renderer index on
+/// it gives that offset.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ChipMap {
-    /// Closed spans in model offsets, sorted and disjoint.
+    /// Spans in model offsets, sorted and disjoint.
     spans: Vec<Range<usize>>,
 }
 
@@ -217,13 +222,18 @@ impl ChipMap {
         (!spans.is_empty()).then_some(Self { spans })
     }
 
-    /// Bytes the chips before the model offset `at` took off the renderer's text.
-    fn shrink_before(&self, at: usize) -> usize {
+    /// Bytes the spans before the model offset `at` added to the renderer's
+    /// text (negative when they took bytes off).
+    fn shift_before(&self, at: usize) -> isize {
         self.spans
             .iter()
             .take_while(|span| span.end <= at)
-            .map(|span| span.len() - CHIP_LEN)
+            .map(|span| CHIP_LEN as isize - span.len() as isize)
             .sum()
+    }
+
+    fn shifted(at: usize, shift: isize) -> usize {
+        at.saturating_add_signed(shift)
     }
 
     /// The renderer's index for a model offset.
@@ -233,19 +243,19 @@ impl ChipMap {
             .iter()
             .find(|s| s.start < offset && offset < s.end)
         {
-            let start = span.start - self.shrink_before(span.start);
+            let start = Self::shifted(span.start, self.shift_before(span.start));
             let near_end = (offset - span.start) * 2 > span.len();
             return start + if near_end { CHIP_LEN } else { 0 };
         }
-        offset - self.shrink_before(offset)
+        Self::shifted(offset, self.shift_before(offset))
     }
 
     /// The model offset for a renderer index. An index inside a chip's
     /// placeholder gives the nearer edge of its span.
     pub(crate) fn to_model(&self, index: usize) -> usize {
-        let mut shrink = 0;
+        let mut shift = 0isize;
         for span in &self.spans {
-            let start = span.start - shrink;
+            let start = Self::shifted(span.start, shift);
             if index <= start {
                 break;
             }
@@ -253,12 +263,13 @@ impl ChipMap {
                 let near_end = (index - start) * 2 > CHIP_LEN;
                 return if near_end { span.end } else { span.start };
             }
-            shrink += span.len() - CHIP_LEN;
+            shift += CHIP_LEN as isize - span.len() as isize;
         }
-        index + shrink
+        index.saturating_add_signed(-shift)
     }
 
-    /// The renderer's range for a model range, widened to whole chips.
+    /// The renderer's range for a model range, widened to whole chips. A
+    /// range that ends where a paperclip starts stops short of it.
     pub(crate) fn range_to_rendered(&self, range: Range<usize>) -> Range<usize> {
         let widen = |offset: usize, up: bool| match self
             .spans
@@ -268,7 +279,16 @@ impl ChipMap {
             Some(span) => self.to_rendered(if up { span.end } else { span.start }),
             None => self.to_rendered(offset),
         };
-        widen(range.start, false)..widen(range.end, true)
+        let start = widen(range.start, false);
+        let mut end = widen(range.end, true);
+        if range.start < range.end {
+            let icons = self
+                .spans
+                .iter()
+                .filter(|s| s.is_empty() && s.start == range.end);
+            end = end.saturating_sub(icons.count() * CHIP_LEN).max(start);
+        }
+        start..end
     }
 
     /// The span whose placeholder is the renderer's `rendered` range.
@@ -276,16 +296,28 @@ impl ChipMap {
         self.spans
             .iter()
             .find(|span| {
-                let start = span.start - self.shrink_before(span.start);
-                start == rendered.start && rendered.len() == CHIP_LEN
+                let start = Self::shifted(span.start, self.shift_before(span.start));
+                !span.is_empty() && start == rendered.start && rendered.len() == CHIP_LEN
             })
             .cloned()
+    }
+
+    /// Whether `rendered` is the object of an empty span (a paperclip).
+    pub(crate) fn icon_at_rendered(&self, rendered: &Range<usize>) -> bool {
+        self.spans.iter().any(|span| {
+            // `shift_before` counts the paperclip itself, which is not before it.
+            let start = Self::shifted(
+                span.start,
+                self.shift_before(span.start) - CHIP_LEN as isize,
+            );
+            span.is_empty() && start == rendered.start && rendered.len() == CHIP_LEN
+        })
     }
 
     /// The renderer's length for a leaf of `model_len` bytes.
     #[cfg(test)]
     pub(crate) fn rendered_len(&self, model_len: usize) -> usize {
-        model_len - self.shrink_before(model_len)
+        Self::shifted(model_len, self.shift_before(model_len))
     }
 }
 
@@ -409,6 +441,27 @@ mod tests {
         assert_eq!(map.to_rendered(9), 6);
         assert_eq!(map.to_model(4), 3);
         assert_eq!(map.to_model(5), 11);
+    }
+
+    #[test]
+    fn a_paperclip_adds_bytes_at_its_offset_and_has_no_model_text() {
+        // "ab link cd" with a paperclip before "link" (4) and a chip at 8..16.
+        let map = map(&[3..3, 8..16]);
+        assert_eq!(map.to_rendered(2), 2);
+        assert_eq!(map.to_rendered(3), 6, "the caret sits after the paperclip");
+        assert_eq!(map.to_rendered(8), 11);
+        assert_eq!(map.to_rendered(16), 14);
+        assert_eq!(map.to_model(2), 2);
+        assert_eq!(map.to_model(4), 3, "inside the paperclip: its offset");
+        assert_eq!(map.to_model(6), 3);
+        assert_eq!(map.to_model(11), 8);
+        assert_eq!(map.to_model(14), 16);
+        assert_eq!(map.span_at_rendered(&(3..6)), None);
+        assert!(map.icon_at_rendered(&(3..6)));
+        assert_eq!(map.span_at_rendered(&(11..14)), Some(8..16));
+        // A selection ending at the link's start leaves the paperclip out.
+        assert_eq!(map.range_to_rendered(0..3), 0..3);
+        assert_eq!(map.range_to_rendered(3..5), 6..8);
     }
 
     #[test]

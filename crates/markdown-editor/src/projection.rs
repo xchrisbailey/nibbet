@@ -8,10 +8,11 @@
 //! in `text::editor_seam`). A top-level block is re-projected only when its
 //! per-block revision changes, so one keystroke re-projects one block.
 
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
+use super::host_display::{ImageDisplayFn, LinkDecorationFn};
 use super::{
-    direct::NodeCache,
+    direct::{Display, NodeCache},
     document::{BlockContent, EditorDocument},
     id::BlockId,
     inline::InlineText,
@@ -98,7 +99,7 @@ impl ProjectionCache {
             .leaves()
             .iter()
             // FORK: the open spans decide which Links are chips.
-            .filter_map(|id| leaf_info(doc, *id, &self.nodes.open_of(*id)))
+            .filter_map(|id| leaf_info(doc, *id, &self.nodes.open_of(*id), &self.nodes.display))
             .collect();
         let mut tables: Vec<(BlockId, Vec<BlockId>)> = Vec::new();
         for id in doc.leaves() {
@@ -135,10 +136,21 @@ impl ProjectionCache {
 
     /// Whether images are projected as placeholders; a change drops the cache.
     pub(crate) fn set_placeholders(&mut self, placeholders: bool) {
-        if self.nodes.placeholders != placeholders {
+        if self.nodes.display.placeholders != placeholders {
             self.invalidate();
-            self.nodes.placeholders = placeholders;
+            self.nodes.display.placeholders = placeholders;
         }
+    }
+
+    /// FORK: the host's image and link callbacks; a change drops the cache.
+    pub(crate) fn set_host_display(
+        &mut self,
+        images: Option<Arc<ImageDisplayFn>>,
+        links: Option<Arc<LinkDecorationFn>>,
+    ) {
+        self.invalidate();
+        self.nodes.display.images = images;
+        self.nodes.display.links = links;
     }
 
     pub(crate) fn invalidate(&mut self) {
@@ -159,6 +171,7 @@ fn leaf_info(
     id: BlockId,
     // FORK: the leaf's open Link spans.
     open: &[std::ops::Range<usize>],
+    display: &Display,
 ) -> Option<LeafInfo> {
     let entry = doc.get(id)?;
     match &entry.content {
@@ -166,7 +179,7 @@ fn leaf_info(
             block: id,
             atomic: false,
             len: inline.len(),
-            chips: chip_map(inline, open),
+            chips: chip_map(inline, open, display),
         }),
         BlockContent::Plain(code) => Some(LeafInfo {
             block: id,
@@ -179,11 +192,20 @@ fn leaf_info(
 }
 
 /// FORK: the chips drawn in a leaf: its Link spans except the open ones.
-fn chip_map(inline: &InlineText, open: &[std::ops::Range<usize>]) -> Option<Rc<ChipMap>> {
-    if !inline.text().contains("[[") {
-        return None;
-    }
-    let mut spans = chip_spans(inline);
+fn chip_map(
+    inline: &InlineText,
+    open: &[std::ops::Range<usize>],
+    display: &Display,
+) -> Option<Rc<ChipMap>> {
+    let mut spans = if inline.text().contains("[[") {
+        chip_spans(inline)
+    } else {
+        Vec::new()
+    };
     spans.retain(|span| !open.contains(span));
+    // FORK: a paperclip before each decorated link adds an object that the
+    // model has no text for: an empty span at the link's start.
+    spans.extend(display.decorations(inline).iter().map(|d| d.start..d.start));
+    spans.sort_by_key(|span| (span.start, span.end));
     ChipMap::new(spans).map(Rc::new)
 }

@@ -94,6 +94,13 @@ impl RenderOnce for BlockEditor {
             let style = render_cx.style().clone().with_table(table);
             render_cx.with_style(style)
         };
+        // FORK: the host decides how each image loads. gpui-base stops decoding
+        // `data:` URLs once a resolver is set, so the resolver does.
+        let render_cx = match self.state.read(cx).image_display.clone() {
+            Some(display) => render_cx
+                .with_image_source(move |uri| super::host_display::source_for(&*display, uri)),
+            None => render_cx,
+        };
         let text_style = render_cx.style().clone();
         let mut style = self.state.read(cx).style.resolved(&theme.tokens);
         if style.selection_is_default() {
@@ -673,6 +680,34 @@ impl Element for EditorRoot {
                 let right = frame.content.map(|c| c.right());
                 frame.layout_tables(&shapes, pad, right);
             }
+            // FORK: the widths image objects wrap at, for the next frame.
+            let widths_changed = {
+                let state = self.state.read(cx);
+                let content = self.content_bounds.get();
+                // A Callout pads both sides (`px_3`); nothing else pads right.
+                let callout_inset = window.rem_size() * 0.75;
+                state.image_widths.record(
+                    content.size.width,
+                    self.snapshot.leaves.iter().filter_map(|info| {
+                        let left = frame.leaf(info.block)?.bounds().left();
+                        let in_callout = state.model.doc.path(info.block).into_iter().any(|b| {
+                            matches!(
+                                state.model.doc.kind(b),
+                                Some(super::kind::BlockKindData::Blockquote {
+                                    callout: Some(_),
+                                    ..
+                                })
+                            )
+                        });
+                        let inset = if in_callout { callout_inset } else { px(0.) };
+                        Some((info.block.as_u64(), content.right() - left - inset))
+                    }),
+                )
+            };
+            if widths_changed {
+                let state = self.state.clone();
+                window.on_next_frame(move |_, cx| state.update(cx, |_, cx| cx.notify()));
+            }
             *self.state.read(cx).frame.borrow_mut() = frame;
             let mask = window.content_mask().bounds;
             let content = self.content_bounds.get();
@@ -716,6 +751,11 @@ impl Element for EditorRoot {
     ) {
         let state = self.state.read(cx);
         let focus = state.focus_handle.clone();
+        let selected_images = state.selected_images();
+        let (ring, ring_radius) = {
+            let theme = gpui_kit::base::Theme::global(cx);
+            (theme.tokens.colors.ring, theme.tokens.radius.sm)
+        };
         let collapsed = state.selection_ranges().is_empty();
         let marked = state.marked_range();
         let caret = state.model.caret();
@@ -835,6 +875,22 @@ impl Element for EditorRoot {
             let open = menu_line == Some((table, line));
             let alpha = if open { 0.8 } else { 0.35 };
             window.paint_quad(fill(grip, style.caret().opacity(alpha)).corner_radii(px(2.)));
+        }
+        // FORK: a selected image shows a 2px ring in the theme's ring colour.
+        for (block, range) in &selected_images {
+            if let Some(image) = frame
+                .leaf(*block)
+                .and_then(|l| l.atom_bounds(range.clone()))
+            {
+                window.paint_quad(gpui::quad(
+                    image.dilate(px(1.)),
+                    ring_radius,
+                    gpui::transparent_black(),
+                    px(2.),
+                    ring,
+                    gpui::BorderStyle::Solid,
+                ));
+            }
         }
         if let Some(area) = selected_area {
             let area = area.dilate(px(4.));
