@@ -200,6 +200,17 @@ fn escape(text: &str) -> String {
     out
 }
 
+/// `markdown` with its links into the folder `old/` pointed at `new/`, for
+/// when an Item's folder is renamed with it.
+pub(crate) fn rename_folder(markdown: &str, old: &str, new: &str) -> String {
+    let prefix = format!("{old}/");
+    markdown_editor::map_destinations(markdown, |destination| {
+        destination
+            .strip_prefix(&prefix)
+            .map(|rest| format!("{new}/{rest}"))
+    })
+}
+
 /// What goes into the raw Markdown at `cursor` in `text`: `markdown`, set
 /// off by blank lines when it is paragraphs.
 pub(crate) fn raw_insertion(text: &str, cursor: usize, markdown: &str, as_blocks: bool) -> String {

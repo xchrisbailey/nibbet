@@ -476,11 +476,21 @@ impl ItemEditor {
                 // editor would take the old name vanishing for a deletion.
                 self.target = Some(EditorTarget::Template {
                     space,
-                    slug: new_slug,
+                    slug: new_slug.clone(),
                 });
                 let disk = self.disk_version(cx);
                 self.seen = disk.clone();
                 self.base = disk;
+                // Its Attachment folder moved with it, so the body's links
+                // into the old one follow.
+                let body = attach::rename_folder(&self.body, &slug, &new_slug);
+                if body != self.body {
+                    self.body = body;
+                    self.load_body(window, cx);
+                    self.dirty = true;
+                    self.flush(window, cx);
+                }
+                self.refresh_attachments(window, cx);
                 self.model.update(cx, |_, cx| cx.notify());
             }
             Ok(_) => {}
