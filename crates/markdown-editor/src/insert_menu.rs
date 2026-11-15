@@ -231,7 +231,9 @@ impl BlockEditorState {
                 callouts
                     || !matches!(
                         option.command(),
-                        EditorCommand::InsertCallout(_) | EditorCommand::InsertMarkdown(_)
+                        EditorCommand::InsertCallout(_)
+                            | EditorCommand::InsertMarkdown(_)
+                            | EditorCommand::Host(_)
                     )
             })
             .filter(|option| option.matches(query))
@@ -370,8 +372,12 @@ impl BlockEditorState {
         let Some(menu) = self.insert_menu.take() else {
             return;
         };
-        self.model.apply_insert_option(menu.block, command);
+        self.model.apply_insert_option(menu.block, command.clone());
         self.after_edit(EditOrigin::Command("insert_menu"), cx);
+        // FORK: the host finishes the job; the caret is already in place.
+        if let EditorCommand::Host(id) = command {
+            cx.emit(super::BlockEditorEvent::InsertMenuHost { id });
+        }
     }
 
     /// Where the open menu hangs from: under the start of its paragraph, in

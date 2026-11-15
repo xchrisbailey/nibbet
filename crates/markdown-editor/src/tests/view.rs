@@ -4711,3 +4711,91 @@ fn a_selected_image_reports_its_box_for_the_ring(cx: &mut TestAppContext) {
     let bounds = bounds.expect("the image is laid out");
     assert_eq!((bounds.size.width, bounds.size.height), (px(30.), px(20.)));
 }
+
+// FORK: hooks for the host's Attachments.
+
+#[gpui::test]
+fn position_at_finds_paragraphs_cells_and_the_end(cx: &mut TestAppContext) {
+    // Leaves: a, x, y, 1, 2, b.
+    let (editor, cx) = open(cx, TABLE_DOC);
+    let leaf_id = |editor: &Entity<BlockEditorState>, cx: &VisualTestContext, ix: usize| {
+        editor.read_with(cx, |e, _| {
+            e.model().document().leaves().nth(ix).unwrap().id()
+        })
+    };
+    let position_at =
+        |editor: &Entity<BlockEditorState>, cx: &VisualTestContext, at: gpui::Point<Pixels>| {
+            editor.read_with(cx, |e, _| e.position_at(at))
+        };
+
+    let at = leaf_point(&editor, cx, 0, 1);
+    assert_eq!(
+        position_at(&editor, cx, at),
+        Some(BlockPosition::new(leaf_id(&editor, cx, 0), 1))
+    );
+    let at = leaf_point(&editor, cx, 3, 1);
+    assert_eq!(
+        position_at(&editor, cx, at).map(|p| p.block),
+        Some(leaf_id(&editor, cx, 3)),
+        "a table cell"
+    );
+    let at = leaf_point(&editor, cx, 5, 1);
+    let below = gpui::point(at.x, at.y + px(500.));
+    assert_eq!(
+        position_at(&editor, cx, below),
+        Some(BlockPosition::new(leaf_id(&editor, cx, 5), 1)),
+        "below the last block is the end of the document"
+    );
+}
+
+#[gpui::test]
+fn host_insert_option_emits_its_id_and_empties_the_block(cx: &mut TestAppContext) {
+    use std::{cell::RefCell, rc::Rc};
+    let (editor, cx) = open_with_options(
+        cx,
+        vec![crate::InsertMenuOption::new(
+            "Attach file",
+            crate::EditorCommand::Host("attach".into()),
+        )],
+    );
+    let ids = Rc::new(RefCell::new(Vec::new()));
+    let seen = ids.clone();
+    cx.update(|_, cx| {
+        cx.subscribe(&editor, move |_, event: &crate::BlockEditorEvent, _| {
+            if let crate::BlockEditorEvent::InsertMenuHost { id } = event {
+                seen.borrow_mut().push(id.to_string());
+            }
+        })
+        .detach();
+    });
+    type_text(cx, "/att");
+    assert_eq!(menu_labels(&editor, cx), ["Attach file"]);
+    keys(cx, "enter");
+    assert_eq!(*ids.borrow(), ["attach"]);
+    assert!(!editor.read_with(cx, |e, _| e.insert_menu_open()));
+    assert_eq!(source(&editor, cx), "");
+    // The host then inserts at the caret in one undo step.
+    editor.update(cx, |e, cx| {
+        e.insert_markdown("![a](a.png)\n\n![b](b.png)", cx)
+    });
+    assert_eq!(source(&editor, cx), "![a](a.png)\n\n![b](b.png)");
+    keys(cx, "M-z");
+    assert_eq!(source(&editor, cx), "");
+}
+
+#[gpui::test]
+fn host_insert_option_is_hidden_below_the_top_level(cx: &mut TestAppContext) {
+    let (editor, cx) = open_with_options(
+        cx,
+        vec![
+            crate::InsertMenuOption::new(
+                "Attach file",
+                crate::EditorCommand::Host("attach".into()),
+            ),
+            crate::InsertMenuOption::new("Task", crate::EditorCommand::ToggleTask),
+        ],
+    );
+    type_text(cx, "> /");
+    assert!(editor.read_with(cx, |e, _| e.insert_menu_open()));
+    assert_eq!(menu_labels(&editor, cx), ["Task"]);
+}

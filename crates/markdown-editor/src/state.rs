@@ -432,6 +432,12 @@ pub enum BlockEditorEvent {
     },
     Focus,
     Blur,
+    /// FORK: an Insert Menu option with an [`EditorCommand::Host`] was
+    /// picked. The typed `/query` is gone and the caret is in the empty
+    /// block; the host inserts later with `paste` or `insert_markdown`.
+    InsertMenuHost {
+        id: SharedString,
+    },
     /// FORK: the Link Picker's "Create Note" row was picked. The host creates
     /// the Note and answers with [`BlockEditorState::complete_link_pick`];
     /// if it can't, it does nothing and the typed text stays as it was.
@@ -1824,6 +1830,26 @@ impl BlockEditorState {
     /// under the window point `at`, as of the last frame.
     pub fn callout_header_at(&self, at: Point<Pixels>) -> Option<BlockId> {
         self.frame.borrow().callout_header_at(at)
+    }
+
+    /// FORK: the caret position nearest a window point, as of the last
+    /// frame, for the host to follow a file drag with `set_selection`. Below
+    /// the last block it is the end of the document; `None` before the first
+    /// frame.
+    pub fn position_at(&self, point: Point<Pixels>) -> Option<BlockPosition> {
+        self.frame.borrow().hit_test(point)
+    }
+
+    /// FORK: insert Markdown at the caret as the editor's own block paste
+    /// does (several blocks, marks and images kept), as one undo step and
+    /// without the clipboard. A selection is replaced.
+    pub fn insert_markdown(&mut self, markdown: &str, cx: &mut Context<Self>) {
+        self.end_composition();
+        self.edit(
+            EditOrigin::Paste,
+            |model| model.insert_markdown_at_caret(markdown).map(drop),
+            cx,
+        );
     }
 
     /// FORK: the Code Block whose language label is drawn under the window
@@ -3272,6 +3298,7 @@ fn command_name(command: &EditorCommand) -> &'static str {
         EditorCommand::SetCallout(_) => "set_callout",
         EditorCommand::InsertCallout(_) => "insert_callout",
         EditorCommand::InsertMarkdown(_) => "insert_markdown",
+        EditorCommand::Host(_) => "host",
         EditorCommand::SetTaskChecked(_) => "set_task_checked",
         EditorCommand::Indent => "indent",
         EditorCommand::Outdent => "outdent",

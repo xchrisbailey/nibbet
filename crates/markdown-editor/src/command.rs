@@ -61,6 +61,11 @@ pub enum EditorCommand {
     /// the editor's own block paste does. Top level only, like
     /// `InsertCallout`.
     InsertMarkdown(SharedString),
+    /// FORK: an Insert Menu option the host handles. Running it changes
+    /// nothing; picking it from the menu leaves the caret in the emptied
+    /// block and emits `BlockEditorEvent::InsertMenuHost { id }`. Top level
+    /// only, like `InsertMarkdown`.
+    Host(SharedString),
 }
 
 #[non_exhaustive]
@@ -1392,6 +1397,7 @@ impl BlockEditorModel {
             EditorCommand::SetCallout(kind) => self.set_callout(kind),
             EditorCommand::InsertCallout(kind) => self.insert_callout(kind),
             EditorCommand::InsertMarkdown(text) => self.insert_markdown(&text),
+            EditorCommand::Host(_) => Ok(false),
             EditorCommand::MoveBlocks { down } => self.move_blocks(down),
             EditorCommand::InsertBlock(BlockKind::HorizontalRule) => {
                 let pos = self
@@ -1792,6 +1798,18 @@ impl BlockEditorModel {
                 .index_in_parent(pos.block)
                 .is_some_and(|(parent, _)| parent == self.doc.root)
         })
+    }
+
+    /// FORK: insert `text` at the caret the way the editor's own block paste
+    /// does (blocks, marks and images kept), with no clipboard round-trip. It
+    /// is one undo step however many blocks it holds. Where blocks can't go
+    /// (a table cell), the text goes in raw. Returns whether anything changed.
+    pub(crate) fn insert_markdown_at_caret(&mut self, text: &str) -> Result<bool, CommandError> {
+        if self.paste_block_markdown(text, true)? {
+            return Ok(true);
+        }
+        self.insert_text(text, EditOrigin::Paste)?;
+        Ok(true)
     }
 
     fn insert_markdown(&mut self, text: &str) -> Result<bool, CommandError> {
