@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
 use sett_store::{
-    Board, Change, Date, EditorMode, INBOX_SLUG, ItemId, JournalEntry, Note, Project, Settings,
-    Space, SpaceIndex, Store, Template, Update, Watcher,
+    AttachmentItem, Board, Change, Date, EditorMode, INBOX_SLUG, ItemId, JournalEntry, Note,
+    Project, Settings, Space, SpaceIndex, Store, Template, Update, Watcher,
 };
 
 use crate::dates::today;
@@ -34,6 +34,9 @@ pub enum AppModelEvent {
     OpenItem(ItemId),
     /// Show this Template of the active Space on the Templates screen.
     OpenTemplate(String),
+    /// Something in this Item's Attachment folder changed outside sett, so
+    /// what the body showed of it may be stale.
+    AttachmentChanged(AttachmentItem),
 }
 
 /// The open data root and the active Space: its index, kept current by a
@@ -122,6 +125,12 @@ impl AppModel {
 
     pub fn space(&self) -> Space {
         self.index.space()
+    }
+
+    /// A handle on the Store for resolving Attachment destinations off the
+    /// model, from callbacks that outlive a borrow of it.
+    pub(crate) fn store(&self) -> Store {
+        self.store.clone()
     }
 
     pub fn index(&self) -> &SpaceIndex {
@@ -477,6 +486,10 @@ impl AppModel {
 
     /// Brings the active Space's index in line with an outside change to it.
     pub fn apply_change(&mut self, change: Change, cx: &mut Context<Self>) {
+        if let Change::Attachment { item, .. } = change {
+            cx.emit(AppModelEvent::AttachmentChanged(item));
+            return;
+        }
         if matches!(change, Change::Template(_) | Change::Templates) {
             if self.reload_templates() {
                 cx.notify();
