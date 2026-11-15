@@ -1,13 +1,16 @@
 //! Adding Attachments (ADR 0004): paste, drop and the Insert Menu picker all
 //! gather sources, copy them into the Item's folder, then insert Markdown.
-//! This is the copying and the Markdown; `ItemEditor` runs it off the UI
-//! thread and puts the result in the body.
+//! This is the copying, the Markdown and where it lands; `ItemEditor` runs it
+//! off the UI thread and tells it which editor and caret.
 
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use gpui_kit::{ClipboardEntry, ClipboardItem};
+use gpui_kit::{App, AppContext as _, ClipboardEntry, ClipboardItem, Context, Window};
+use markdown_editor::{
+    BlockEditorState, BlockId, BlockKind, BlockPosition, BlockSelection, PasteRequest,
+};
 use sett_store::{AttachmentOwner, Resolved, Space, Store};
 
 /// Something to attach.
@@ -69,9 +72,9 @@ impl Source {
     }
 }
 
-/// One attached file's Markdown.
+/// One attached file's Markdown: an image or a link.
 #[derive(Debug)]
-struct Piece {
+struct FileLink {
     markdown: String,
     image: bool,
 }
@@ -79,8 +82,8 @@ struct Piece {
 /// What copying the sources produced: Markdown for the ones that worked, and
 /// the ones that didn't.
 #[derive(Debug, Default)]
-pub(crate) struct Attached {
-    pieces: Vec<Piece>,
+pub(crate) struct Copied {
+    links: Vec<FileLink>,
     failed: Vec<(String, io::Error)>,
 }
 
@@ -89,14 +92,14 @@ pub(crate) struct Attached {
 pub(crate) fn copy(
     store: &Store,
     space: Space,
-    item: &AttachmentOwner,
+    owner: &AttachmentOwner,
     sources: Vec<Source>,
-) -> Attached {
-    let mut out = Attached::default();
+) -> Copied {
+    let mut out = Copied::default();
     for source in sources {
         let label = source.label();
-        match copy_one(store, space, item, &source) {
-            Ok(piece) => out.pieces.push(piece),
+        match copy_one(store, space, owner, &source) {
+            Ok(link) => out.links.push(link),
             Err(err) => out.failed.push((label, err)),
         }
     }
@@ -106,9 +109,9 @@ pub(crate) fn copy(
 fn copy_one(
     store: &Store,
     space: Space,
-    item: &AttachmentOwner,
+    owner: &AttachmentOwner,
     source: &Source,
-) -> io::Result<Piece> {
+) -> io::Result<FileLink> {
     let (attached, link_text, alt) = match source {
         Source::Path(path) => {
             if path.is_dir() {
@@ -117,12 +120,12 @@ fn copy_one(
                     "It\u{2019}s a folder",
                 ));
             }
-            let attached = store.attach_file(space, item, path)?;
+            let attached = store.attach_file(space, owner, path)?;
             let alt = attached.name.clone();
             (attached, file_name(path), alt)
         }
         Source::Image { ext, bytes } => {
-            let attached = store.attach_bytes(space, item, ext, bytes)?;
+            let attached = store.attach_bytes(space, owner, ext, bytes)?;
             let name = attached
                 .destination
                 .rsplit('/')
@@ -134,56 +137,60 @@ fn copy_one(
     };
     let destination = markdown_editor::markdown_destination(&attached.destination);
     Ok(if attached.inline {
-        Piece {
+        FileLink {
             markdown: format!("![{}]({destination})", escape(&alt)),
             image: true,
         }
     } else {
-        Piece {
+        FileLink {
             markdown: format!("[{}]({destination})", escape(&link_text)),
             image: false,
         }
     })
 }
 
-impl Attached {
-    /// Whether anything went in.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.pieces.is_empty()
-    }
+/// What is ready to insert, and what to tell the user about what wasn't.
+#[derive(Debug)]
+pub(crate) struct Outcome {
+    pub(crate) markdown: String,
+    /// Whether each block stays whole (images, batches) instead of merging
+    /// into the text around the caret.
+    pub(crate) as_blocks: bool,
+    pub(crate) notice: Option<String>,
+}
 
+impl Copied {
     /// Images, and any batch of several files, get a paragraph each. One
     /// other file is an inline link at the caret.
-    pub(crate) fn as_blocks(&self) -> bool {
-        self.pieces.len() > 1 || self.pieces.iter().any(|piece| piece.image)
-    }
-
-    /// The Markdown to insert: paragraphs in order when [`Self::as_blocks`],
-    /// otherwise the one link.
-    pub(crate) fn markdown(&self) -> String {
-        self.pieces
-            .iter()
-            .map(|piece| piece.markdown.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n")
-    }
-
-    /// The error notice for what didn't go in, or `None` when all did.
-    pub(crate) fn notice(&self) -> Option<String> {
-        let (_, first) = self.failed.first()?;
-        let names = self
-            .failed
-            .iter()
-            .map(|(name, _)| name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let reason = first.to_string();
-        let reason = reason.trim_end_matches('.');
-        Some(format!("Couldn\u{2019}t attach {names}. {reason}."))
+    pub(crate) fn into_outcome(self) -> Outcome {
+        Outcome {
+            as_blocks: self.links.len() > 1 || self.links.iter().any(|link| link.image),
+            markdown: self
+                .links
+                .iter()
+                .map(|link| link.markdown.as_str())
+                .collect::<Vec<_>>()
+                .join("\n\n"),
+            notice: notice("attach", &self.failed),
+        }
     }
 }
 
-fn file_name(path: &Path) -> String {
+/// The error notice for what failed (`verb` is "attach" or "copy"), or
+/// `None` when nothing did.
+fn notice(verb: &str, failed: &[(String, io::Error)]) -> Option<String> {
+    let (_, first) = failed.first()?;
+    let names = failed
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let reason = first.to_string();
+    let reason = reason.trim_end_matches('.');
+    Some(format!("Couldn\u{2019}t {verb} {names}. {reason}."))
+}
+
+pub(crate) fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.display().to_string())
@@ -201,27 +208,173 @@ fn escape(text: &str) -> String {
     out
 }
 
+/// The last text copied or cut from an editor, and the Item it came from,
+/// app-wide. A paste of the same text into another Item brings the source's
+/// Attachments along (ADR 0004).
+struct CopiedFrom {
+    text: String,
+    space: Space,
+    owner: AttachmentOwner,
+}
+
+impl gpui_kit::Global for CopiedFrom {}
+
+/// Remembers a copy or cut from `from`, or forgets the last one when it was
+/// raw code (`markdown` false), which is never rewritten. A cut leaves the
+/// source's files where they are.
+pub(crate) fn remember_copy(
+    cx: &mut App,
+    text: &str,
+    markdown: bool,
+    from: Option<(Space, AttachmentOwner)>,
+) {
+    match from {
+        Some((space, owner)) if markdown => cx.set_global(CopiedFrom {
+            text: text.to_string(),
+            space,
+            owner,
+        }),
+        _ => {
+            if cx.has_global::<CopiedFrom>() {
+                cx.remove_global::<CopiedFrom>();
+            }
+        }
+    }
+}
+
+/// Where `text` was copied from, when that is another Item than `to`: the
+/// paste then carries its Attachments. `None` for text from outside sett or
+/// from the same Item.
+pub(crate) fn copied_from(
+    cx: &App,
+    text: &str,
+    to: (Space, &AttachmentOwner),
+) -> Option<(Space, AttachmentOwner)> {
+    let from = cx
+        .try_global::<CopiedFrom>()
+        .filter(|from| from.text == text)?;
+    (from.space != to.0 || &from.owner != to.1).then(|| (from.space, from.owner.clone()))
+}
+
+/// Runs `work` off the UI thread, then `then` on the entity it was started
+/// from, so a link is never drawn before its file exists.
+pub(crate) fn off_thread<T: 'static, R: Send + 'static>(
+    window: &mut Window,
+    cx: &mut Context<T>,
+    work: impl FnOnce() -> R + Send + 'static,
+    then: impl FnOnce(&mut T, R, &mut Window, &mut Context<T>) + 'static,
+) {
+    cx.spawn_in(window, async move |this, cx| {
+        let result = cx.background_spawn(async move { work() }).await;
+        this.update_in(cx, |this, window, cx| then(this, result, window, cx))
+            .ok();
+    })
+    .detach();
+}
+
+/// Where in the block view finished Markdown goes.
+#[derive(Debug, Clone)]
+pub(crate) enum Landing {
+    /// The caret as it is when the copying is done (a drop moved it first).
+    Caret,
+    /// The paste that started it: settled first, then the Markdown goes in at
+    /// the caret as it is now even when the paste went stale.
+    Paste(PasteRequest),
+    /// Like [`Landing::Paste`], but the Markdown is pasted as the clipboard's
+    /// text would be, so the editor's own paste rules apply.
+    PasteText(PasteRequest),
+    /// The empty block the Insert Menu left, however the document changed
+    /// while the files were copied: it is filled if still empty, otherwise the
+    /// Markdown goes in as blocks after its text. A block that is gone, or no
+    /// longer at the top level, means the end of the body.
+    Menu(BlockId),
+}
+
+impl Landing {
+    /// The Insert Menu's block, from the caret it leaves there.
+    pub(crate) fn menu(block: &BlockEditorState) -> Landing {
+        match block.selection() {
+            BlockSelection::Text { head, .. } => Landing::Menu(head.block),
+            _ => Landing::Caret,
+        }
+    }
+}
+
+/// Puts `markdown` into the block view at `landing`, as one undo step.
+pub(crate) fn land(
+    block: &mut BlockEditorState,
+    landing: &Landing,
+    markdown: &str,
+    as_blocks: bool,
+    cx: &mut Context<BlockEditorState>,
+) {
+    let insert = |block: &mut BlockEditorState, as_blocks, cx: &mut Context<BlockEditorState>| {
+        if as_blocks {
+            block.insert_markdown_blocks(markdown, cx);
+        } else {
+            block.insert_markdown(markdown, cx);
+        }
+    };
+    match landing {
+        Landing::Caret => insert(block, as_blocks, cx),
+        Landing::Paste(request) => {
+            block.apply_paste(request, None, cx);
+            if !markdown.is_empty() {
+                insert(block, as_blocks, cx);
+            }
+        }
+        Landing::PasteText(request) => {
+            if !block.apply_paste(request, Some(markdown), cx) {
+                insert(block, as_blocks, cx);
+            }
+        }
+        Landing::Menu(id) => {
+            let (at, empty) = match menu_caret(block, *id) {
+                Some((at, empty)) => (Some(at), empty),
+                None => (None, false),
+            };
+            let moved = match at {
+                Some(at) => block.set_selection(BlockSelection::caret(at), cx),
+                // Only fails for an empty document, where the caret is
+                // already at the end.
+                None => block.select_end(cx).or(Ok(())),
+            };
+            if moved.is_ok() {
+                insert(block, as_blocks || !empty, cx);
+            }
+        }
+    }
+}
+
+/// The end of the top-level text block `id` and whether it is an empty
+/// paragraph; `None` when it is gone or no longer at the top level.
+fn menu_caret(block: &BlockEditorState, id: BlockId) -> Option<(BlockPosition, bool)> {
+    let doc = block.model().document();
+    let leaf = doc.block(id)?;
+    let text = leaf.text()?;
+    (leaf.parent()?.id() == doc.root().id()).then(|| {
+        (
+            BlockPosition::new(id, text.len()),
+            text.is_empty() && leaf.kind() == BlockKind::Paragraph,
+        )
+    })
+}
+
 /// Markdown whose Attachments were copied into another Item's folder.
 #[derive(Debug, Default)]
 pub(crate) struct Carried {
     /// The Markdown with its destinations pointed at the copies.
-    pub(crate) markdown: String,
+    markdown: String,
     failed: Vec<(String, io::Error)>,
 }
 
 impl Carried {
-    /// The error notice for what couldn't be copied, or `None` when all was.
-    pub(crate) fn notice(&self) -> Option<String> {
-        let (_, first) = self.failed.first()?;
-        let names = self
-            .failed
-            .iter()
-            .map(|(name, _)| name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let reason = first.to_string();
-        let reason = reason.trim_end_matches('.');
-        Some(format!("Couldn\u{2019}t copy {names}. {reason}."))
+    pub(crate) fn into_outcome(self) -> Outcome {
+        Outcome {
+            markdown: self.markdown,
+            as_blocks: false,
+            notice: notice("copy", &self.failed),
+        }
     }
 }
 
@@ -321,7 +474,7 @@ mod tests {
         std::fs::write(&top, b"x").unwrap();
         std::fs::write(&deep, b"x").unwrap();
 
-        let attached = copy(
+        let outcome = copy(
             &store,
             Space::Personal,
             &item,
@@ -329,7 +482,7 @@ mod tests {
         );
 
         assert_eq!(
-            attached.markdown(),
+            outcome.into_outcome().markdown,
             "[my (draft).pdf](<plan/my (draft).pdf>)\n\n![shot 1](<plan/sub dir/shot 1.png>)"
         );
         assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 2);
@@ -337,15 +490,15 @@ mod tests {
 
     #[test]
     fn the_notice_names_every_failure() {
-        let attached = Attached {
-            pieces: Vec::new(),
+        let copied = Copied {
+            links: Vec::new(),
             failed: vec![
                 ("a folder".into(), io::Error::other("It\u{2019}s a folder")),
                 ("report.pdf".into(), io::Error::other("disk full")),
             ],
         };
         assert_eq!(
-            attached.notice().as_deref(),
+            copied.into_outcome().notice.as_deref(),
             Some("Couldn\u{2019}t attach a folder, report.pdf. It\u{2019}s a folder.")
         );
     }
