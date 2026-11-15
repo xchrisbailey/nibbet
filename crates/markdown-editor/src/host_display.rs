@@ -119,7 +119,7 @@ pub(crate) fn source_for(display: &ImageDisplayFn, uri: &SharedUri) -> ImageSour
 
 /// Decodes an image `data:` URL, base64 or percent-encoded. `None` for
 /// anything else.
-fn data_url_image(url: &str) -> Option<Arc<Image>> {
+pub(crate) fn data_url_image(url: &str) -> Option<Arc<Image>> {
     let rest = url.strip_prefix("data:")?;
     let (head, body) = rest.split_once(',')?;
     let mut parts = head.split(';');
@@ -159,7 +159,7 @@ fn decode_base64(text: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn percent_decode(text: &str) -> Vec<u8> {
+pub(crate) fn percent_decode(text: &str) -> Vec<u8> {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut at = 0;
@@ -211,7 +211,7 @@ impl MarkdownPlugin for ImagePlaceholderPlugin {
 /// The widest a placeholder grows; a longer text ends in an ellipsis.
 const MAX_WIDTH_REMS: f32 = 20.;
 
-fn placeholder_chip(data: &PlaceholderData, cx: &App) -> AnyElement {
+pub(crate) fn placeholder_chip(data: &PlaceholderData, cx: &App) -> AnyElement {
     let theme = cx.theme();
     h_flex()
         .id("image-placeholder")

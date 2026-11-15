@@ -29,6 +29,10 @@ pub(crate) fn paragraph(
     id: BlockId,
     display: &Display,
     open: &[Range<usize>],
+    // FORK: whether loaded images may be drawn as bordered objects. Table
+    // cells are sized by their content, so an image there would resize its
+    // own column and never settle; they keep the renderer's own images.
+    styled_images: bool,
 ) -> Paragraph {
     let mut paragraph = Paragraph::default();
     // FORK: where a link starts that the host decorates.
@@ -37,7 +41,7 @@ pub(crate) fn paragraph(
     let spans = super::wiki_chip::chip_spans(inline);
     for (range, mark, atom) in inline.pieces() {
         match atom {
-            Some(InlineAtom::Image(image)) => match display.image_placeholder(image) {
+            Some(InlineAtom::Image(image)) => match display.image(image, id, styled_images) {
                 Some(node) => {
                     let len = node.text().len();
                     paragraph.push(node.marks(vec![(0..len, mark.clone())]))
@@ -157,22 +161,31 @@ pub(crate) struct DecoratedLink {
 }
 
 impl Display {
-    /// The placeholder to draw for `image`, or `None` to let the renderer
-    /// load it.
-    fn image_placeholder(
+    /// The object to draw for `image` in leaf `leaf`, or `None` to let the
+    /// renderer load it: a placeholder, or (when `styled`) an image the host
+    /// loads, drawn by `image_object`.
+    fn image(
         &self,
         image: &gpui_kit::base::text::editor_host::ImageNode,
+        leaf: BlockId,
+        styled: bool,
     ) -> Option<InlineNode> {
         if self.placeholders {
             return Some(image_placeholder(image, None));
         }
         let images = self.images.as_deref()?;
-        match display_for(images, &image.url)? {
-            ImageDisplay::Placeholder { icon, text } => {
-                Some(image_placeholder(image, Some((icon, text))))
+        match display_for(images, &image.url) {
+            Some(ImageDisplay::Placeholder { icon, text }) => {
+                return Some(image_placeholder(image, Some((icon, text))));
             }
-            ImageDisplay::Load(_) => None,
+            Some(ImageDisplay::Load(_)) => {}
+            // A `data:` URL never reaches the host; the object decodes it.
+            None => {}
         }
+        let images = self.images.clone()?;
+        styled.then(|| {
+            super::image_object::image_node(images, leaf.as_u64(), &image.url, image.alt.as_ref())
+        })
     }
 
     /// The link runs of `inline` the host decorates. A run is a stretch of
@@ -301,9 +314,9 @@ impl NodeCache {
                     .iter()
                     .map(|cell| match doc.inline(*cell) {
                         Some(inline) => {
-                            paragraph(inline, *cell, &self.display, &self.open.of(*cell))
+                            paragraph(inline, *cell, &self.display, &self.open.of(*cell), false)
                         }
-                        None => paragraph(&InlineText::new(), *cell, &self.display, &[]),
+                        None => paragraph(&InlineText::new(), *cell, &self.display, &[], false),
                     })
                     .collect();
                 self.rows.insert(id, (revision, row.clone()));
@@ -322,8 +335,8 @@ impl NodeCache {
         };
         let open = self.open.of(id);
         let inline = || match &entry.content {
-            BlockContent::Inline(inline) => paragraph(inline, id, &self.display, &open),
-            _ => paragraph(&InlineText::new(), id, &self.display, &[]),
+            BlockContent::Inline(inline) => paragraph(inline, id, &self.display, &open, true),
+            _ => paragraph(&InlineText::new(), id, &self.display, &[], true),
         };
         Some(match &entry.kind {
             BlockKindData::Root => BlockNode::Root {

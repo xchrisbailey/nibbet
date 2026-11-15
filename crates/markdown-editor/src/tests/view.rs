@@ -4646,7 +4646,8 @@ fn host_image_display_keeps_data_urls_rendering(cx: &mut TestAppContext) {
         asked.lock().unwrap().is_empty(),
         "data: never reaches the host"
     );
-    assert_eq!(atom_width(&editor, cx, 0), px(30.));
+    // 30pt of image and a 1px border each side.
+    assert_eq!(atom_width(&editor, cx, 0), px(32.));
     assert_eq!(source(&editor, cx), initial);
     assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 0);
 }
@@ -4798,4 +4799,171 @@ fn host_insert_option_is_hidden_below_the_top_level(cx: &mut TestAppContext) {
     type_text(cx, "> /");
     assert!(editor.read_with(cx, |e, _| e.insert_menu_open()));
     assert_eq!(menu_labels(&editor, cx), ["Task"]);
+}
+
+// FORK: host images drawn as bordered, capped inline objects (#126).
+
+/// 100x1000 and 2000x100 solid PNGs.
+const PNG_TALL: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAAPoCAIAAACnGsw9AAAFP0lEQVR42u3QMQ0AAAgDsElDGtKQhgU+niZV0HQNR1EgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWd8W6KASVwk1DigAAAAASUVORK5CYII=";
+const PNG_WIDE: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAB9AAAABkCAIAAABRpjzDAAAC/ElEQVR42u3YMQ0AAAgEsZeGNKQhDRFMJE2q4MZL1wAAAAAAAEeRAAAAAAAADHcAAAAAADDcAQAAAADAcAcAAAAAAAx3AAAAAAAw3AEAAAAAwHAHAAAAAADDHQAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAAAx3AAAAAADAcAcAAAAAAMMdAAAAAAAMdwAAAAAAMNwBAAAAAADDHQAAAAAADHcAAAAAADDcAQAAAADAcAcAAAAAAAx3AAAAAAAw3AEAAAAAwHAHAAAAAADDHQAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAADDcAQAAAADAcAcAAAAAAMMdAAAAAAAMdwAAAAAAwHAHAAAAAADDHQAAAAAADHcAAAAAADDcAQAAAAAAwx0AAAAAAAx3AAAAAAAw3AEAAAAAwHAHAAAAAAAMdwAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAADDcAQAAAADAcAcAAAAAAMMdAAAAAAAMdwAAAAAAwHAHAAAAAADDHQAAAAAADHcAAAAAADDcAQAAAAAAwx0AAAAAAAx3AAAAAAAw3AEAAAAAAMMdAAAAAAAMdwAAAAAAMNwBAAAAAMBwBwAAAAAADHcAAAAAADDcAQAAAADAcAcAAAAAAMMdAAAAAAAw3AEAAAAAwHAHAAAAAADDHQAAAAAADHcAAAAAAMBwBwAAAAAAwx0AAAAAAAx3AAAAAAAw3AEAAAAAAMMdAAAAAAAMdwAAAAAAMNwBAAAAAMBwBwAAAAAADHcAAAAAADDcAQAAAADAcAcAAAAAAMNdBQAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAADDcAQAAAADAcAcAAAAAAMMdAAAAAAAMdwAAAAAAwHAHAAAAAADDHQAAAAAADHcAAAAAADDcAQAAAAAAwx0AAAAAAAx3AAAAAAAw3AEAAAAAwHAHAAAAAAAMdwAAAAAAMNwBAAAAAMBwBwAAAAAAwx0AAAAAADDcAQAAAADAcAcAAAAAgJ8WqFckrU/nAL0AAAAASUVORK5CYII=";
+
+/// The box of the first leaf's image atom at the model `range`, once the
+/// image decoded and the editor reflowed.
+fn image_box(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+    range: std::ops::Range<usize>,
+) -> gpui::Bounds<Pixels> {
+    for _ in 0..3 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        draw(cx);
+    }
+    editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        e.frame
+            .borrow()
+            .leaf(id)
+            .unwrap()
+            .atom_bounds(range)
+            .expect("the image is laid out")
+    })
+}
+
+/// An editor whose host loads every image (data: URLs included) itself.
+fn open_with_images<'a>(
+    cx: &'a mut TestAppContext,
+    source: &str,
+) -> (Entity<BlockEditorState>, &'a mut VisualTestContext) {
+    let (editor, cx, _) = open_hosted(cx, source, |state, cx| {
+        state.set_image_display(
+            std::sync::Arc::new(|url| {
+                crate::ImageDisplay::Load(gpui::ImageSource::Custom(std::sync::Arc::new(
+                    move |_, _| {
+                        let _ = url;
+                        None
+                    },
+                )))
+            }),
+            cx,
+        );
+    });
+    (editor, cx)
+}
+
+#[gpui::test]
+fn a_tall_image_is_capped_at_480_and_keeps_its_ratio(cx: &mut TestAppContext) {
+    let initial = format!("![t]({PNG_TALL})");
+    let (editor, cx) = open_with_images(cx, &initial);
+    let b = image_box(&editor, cx, 0..3);
+    assert_eq!(b.size.height, px(480.));
+    // 100x1000 inside a 1px border on every side.
+    let ratio = (b.size.width - px(2.)) / (b.size.height - px(2.));
+    assert!((ratio - 0.1).abs() < 0.005, "{b:?}");
+    assert_eq!(source(&editor, cx), initial);
+}
+
+#[gpui::test]
+fn a_wide_image_shrinks_to_the_wrap_width_and_keeps_its_ratio(cx: &mut TestAppContext) {
+    let initial = format!("![w]({PNG_WIDE})");
+    let (editor, cx) = open_with_images(cx, &initial);
+    let b = image_box(&editor, cx, 0..3);
+    let content = editor.read_with(cx, |e, _| e.frame.borrow().content.unwrap());
+    assert!(b.size.width <= content.size.width, "{b:?} in {content:?}");
+    assert!(b.size.width > content.size.width - px(4.), "{b:?}");
+    let ratio = (b.size.width - px(2.)) / (b.size.height - px(2.));
+    assert!((ratio - 20.).abs() < 0.5, "{b:?}");
+}
+
+#[gpui::test]
+fn a_loaded_image_selects_on_click_and_backspace_deletes_it(cx: &mut TestAppContext) {
+    let initial = format!("![w]({PNG_30X20})cd");
+    let (editor, cx) = open_with_images(cx, &initial);
+    let b = image_box(&editor, cx, 0..3);
+    cx.simulate_mouse_down(b.center(), MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(b.center(), MouseButton::Left, Modifiers::none());
+    let sel = editor.read_with(cx, |e, _| e.model().selection().clone());
+    let BlockSelection::Text { anchor, head } = sel else {
+        panic!("{sel:?}")
+    };
+    assert_eq!((anchor.offset, head.offset), (0, 3));
+    keys(cx, "backspace");
+    assert_eq!(source(&editor, cx), "cd");
+}
+
+#[gpui::test]
+fn a_failed_load_lays_out_as_the_placeholder_chip(cx: &mut TestAppContext) {
+    let initial = "![shot](fix/gone%20shot.png)";
+    let (editor, cx, requests) = open_hosted(cx, initial, |state, cx| {
+        state.set_image_display(
+            std::sync::Arc::new(|_| {
+                crate::ImageDisplay::Load(gpui::ImageSource::Custom(std::sync::Arc::new(|_, _| {
+                    Some(Err(gpui::ImageCacheError::Other(std::sync::Arc::new(
+                        anyhow::anyhow!("gone"),
+                    ))))
+                })))
+            }),
+            cx,
+        );
+    });
+    draw(cx);
+    let chip = cx.update(|window, _| window.find_by_label("gone shot.png").bounds());
+    assert!(chip.size.width > px(40.), "{chip:?}");
+    assert_eq!(source(&editor, cx), initial);
+    assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[gpui::test]
+fn an_image_still_loading_reserves_three_quarters_of_a_line(cx: &mut TestAppContext) {
+    let (editor, cx) = open_with_images(cx, "ab![w](x.png)cd");
+    let b = image_box(&editor, cx, 2..5);
+    let line = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        e.frame.borrow().leaf(id).unwrap().line_height()
+    });
+    assert!(
+        (b.size.width - line * 0.75).abs() < px(1.5),
+        "{b:?} for a line of {line:?}"
+    );
+}
+
+#[gpui::test]
+fn images_in_table_cells_keep_the_renderers_own_drawing(cx: &mut TestAppContext) {
+    let initial = format!("| t |\n| --- |\n| ![d]({PNG_30X20}) |");
+    let (editor, cx) = open_with_images(cx, &initial);
+    for _ in 0..3 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        draw(cx);
+    }
+    // 30pt wide, as the renderer draws it: no border, no object.
+    let width = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().nth(1).unwrap().id();
+        let f = e.frame.borrow();
+        let leaf = f.leaf(id).unwrap();
+        leaf.caret_point(3).x - leaf.caret_point(0).x
+    });
+    assert_eq!(width, px(30.));
+}
+
+#[gpui::test]
+fn an_image_in_a_list_item_stays_inside_its_indented_column(cx: &mut TestAppContext) {
+    let initial = format!("- ![w]({PNG_WIDE})");
+    let (editor, cx) = open_with_images(cx, &initial);
+    for _ in 0..3 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(10));
+        draw(cx);
+    }
+    let (b, content) = editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        let f = e.frame.borrow();
+        (
+            f.leaf(id).unwrap().atom_bounds(0..3).unwrap(),
+            f.content.unwrap(),
+        )
+    });
+    assert!(b.origin.x > content.origin.x, "indented by the marker");
+    assert!(b.right() <= content.right(), "{b:?} in {content:?}");
+    assert!(b.right() > content.right() - px(4.), "{b:?} in {content:?}");
 }
