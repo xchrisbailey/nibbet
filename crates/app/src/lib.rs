@@ -19,6 +19,7 @@ mod notes;
 mod notice;
 mod project_dialog;
 mod shell;
+mod split;
 mod task_view;
 mod template_options;
 mod templates;

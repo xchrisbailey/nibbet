@@ -20,6 +20,7 @@ use sett_store::{ItemId, Note, Space};
 use crate::app_model::{AppModel, Selection};
 use crate::confirm_delete::{ITEM_CONSEQUENCE, confirm_delete};
 use crate::item_editor::{ItemEditor, ItemRef};
+use crate::split;
 
 actions!(sett, [OpenNote]);
 
@@ -262,9 +263,7 @@ impl NotesView {
                 .collect();
             v_flex().gap_px().children(rows).into_any_element()
         };
-        v_flex()
-            .w_64()
-            .flex_shrink_0()
+        split::list_column()
             .h_full()
             .border_r_1()
             .border_color(cx.theme().border)
@@ -320,7 +319,7 @@ impl Render for NotesView {
             .size_full()
             .items_stretch()
             .child(self.render_list(cx))
-            .child(div().flex_1().min_w_0().h_full().child(editor))
+            .child(split::editor_column().h_full().child(editor))
             .into_any_element()
     }
 }

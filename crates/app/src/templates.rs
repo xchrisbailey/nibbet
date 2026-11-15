@@ -19,6 +19,7 @@ use sett_store::Template;
 use crate::app_model::AppModel;
 use crate::confirm_delete::{TEMPLATE_CONSEQUENCE, confirm_delete};
 use crate::item_editor::{EditorTarget, ItemEditor, UNTITLED_TEMPLATE};
+use crate::split;
 
 actions!(sett, [OpenTemplate]);
 
@@ -223,9 +224,7 @@ impl TemplatesView {
             .iter()
             .map(|t| self.render_row(t, open.as_ref() == Some(&t.slug), cx))
             .collect();
-        v_flex()
-            .w_64()
-            .flex_shrink_0()
+        split::list_column()
             .h_full()
             .border_r_1()
             .border_color(cx.theme().border)
@@ -306,7 +305,7 @@ impl Render for TemplatesView {
             .size_full()
             .items_stretch()
             .child(self.render_list(&templates, cx))
-            .child(div().flex_1().min_w_0().h_full().child(editor))
+            .child(split::editor_column().h_full().child(editor))
             .into_any_element()
     }
 }
