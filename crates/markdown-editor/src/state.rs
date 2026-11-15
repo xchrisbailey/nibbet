@@ -1860,6 +1860,19 @@ impl BlockEditorState {
         );
     }
 
+    /// FORK: like [`Self::insert_markdown`], but each block stays a block of
+    /// its own: a paragraph holding the caret is split around them, and an
+    /// empty one is filled. For images and files that must not merge into
+    /// the surrounding text.
+    pub fn insert_markdown_blocks(&mut self, markdown: &str, cx: &mut Context<Self>) {
+        self.end_composition();
+        self.edit(
+            EditOrigin::Paste,
+            |model| model.insert_markdown_blocks_at_caret(markdown).map(drop),
+            cx,
+        );
+    }
+
     /// FORK: the Code Block whose language label is drawn under the window
     /// point `at`, as of the last frame; a click on it opens the Language Menu.
     pub fn code_label_at(&self, at: Point<Pixels>) -> Option<BlockId> {

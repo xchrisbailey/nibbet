@@ -8,21 +8,27 @@ use gpui_kit::component::input::{Editor, EditorState, Input, InputEvent, InputSt
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, StyledExt as _, WindowExt as _, v_flex};
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement as _, Render, RetainAllImageCache, Role, ScrollHandle,
+    AnyElement, App, AppContext as _, ClipboardItem, Context, DragMoveEvent, Entity, ExternalPaths,
+    Focusable as _, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _,
+    PathPromptOptions, Render, RetainAllImageCache, Role, ScrollHandle,
     StatefulInteractiveElement as _, Styled as _, Subscription, Task, TestSupportExt as _, Window,
     div, image_cache, prelude::FluentBuilder as _,
 };
-use markdown_editor::{BlockEditor, BlockEditorEvent, BlockEditorState};
+use markdown_editor::{
+    BlockEditor, BlockEditorEvent, BlockEditorState, BlockKind, BlockSelection, ClipboardPolicy,
+    PasteRequest,
+};
 use sett_store::{
     AttachmentItem, Date, EditorMode, JournalEntry, LinkTarget, Note, Space, Template,
 };
 
 use crate::app_model::{AppModel, AppModelEvent};
+use crate::attach::{self, Source};
 use crate::attachments::{Attachments, Open};
 use crate::dates::to_chrono;
 use crate::item_links::ItemLinks;
 use crate::notice::frontmatter_notice;
+use crate::template_options::ATTACHMENT;
 
 pub(crate) struct OpenInsertMenuOnLoad;
 
@@ -230,6 +236,8 @@ impl ItemEditor {
         let block = cx.new(|cx| {
             let mut state = BlockEditorState::new(window, cx);
             state.set_scroll_handle(scroll.clone());
+            // Pastes of files and images are answered here (Attachments).
+            state.set_clipboard_policy(ClipboardPolicy::Host);
             state
         });
         let images = RetainAllImageCache::new(cx);
@@ -255,6 +263,12 @@ impl ItemEditor {
                     }
                     BlockEditorEvent::WikiLinkClicked { slug, heading } => {
                         this.follow_link(slug, heading.as_deref(), window, cx);
+                    }
+                    BlockEditorEvent::PasteRequested { request, item } => {
+                        this.paste_requested(request.clone(), item, window, cx);
+                    }
+                    BlockEditorEvent::InsertMenuHost { id } if id.as_ref() == ATTACHMENT => {
+                        this.pick_attachments(window, cx);
                     }
                     BlockEditorEvent::CreateLinkTargetRequested { title } => {
                         this.create_link_target(title, block, window, cx);
@@ -696,6 +710,212 @@ impl ItemEditor {
         }
     }
 
+    /// A paste in the block view. Finder files and image data are attached;
+    /// anything else, including the editor's own Code Block and Callout
+    /// copies, pastes as text exactly as without the host.
+    fn paste_requested(
+        &mut self,
+        request: PasteRequest,
+        item: &ClipboardItem,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let sources = Source::from_clipboard(item);
+        if sources.is_empty() {
+            self.block.update(cx, |block, cx| {
+                block.apply_paste(&request, item.text().as_deref(), cx);
+            });
+            return;
+        }
+        self.attach(sources, Some(request), item.text(), window, cx);
+    }
+
+    /// The Insert Menu's Attachment option: asks for files, then attaches
+    /// them. Cancelling leaves the empty block as it is.
+    fn pick_attachments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let picked = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: true,
+            prompt: Some("Attach".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = picked.await else {
+                return;
+            };
+            this.update_in(cx, |this, window, cx| {
+                let sources = paths.into_iter().map(Source::Path).collect();
+                this.attach(sources, None, None, window, cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Files dropped on the body go in at `at`: the caret under the pointer
+    /// in the block view, the end of the body below the last block, or the
+    /// raw cursor.
+    fn dropped(
+        &mut self,
+        paths: &ExternalPaths,
+        at: DropAt,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.drop_caret(at, window.mouse_position(), window, cx);
+        let sources = paths.paths().iter().cloned().map(Source::Path).collect();
+        self.attach(sources, None, None, window, cx);
+    }
+
+    /// While a file is dragged over the body, the caret follows the pointer.
+    fn drag_caret(
+        &mut self,
+        event: &DragMoveEvent<ExternalPaths>,
+        at: DropAt,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if event.bounds.contains(&event.event.position) {
+            self.drop_caret(at, event.event.position, window, cx);
+        }
+    }
+
+    fn drop_caret(
+        &mut self,
+        at: DropAt,
+        pointer: gpui_kit::Point<gpui_kit::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.mode != EditorMode::Block {
+            return;
+        }
+        match at {
+            DropAt::Pointer => self.move_caret_to(pointer, window, cx),
+            DropAt::End => self.block.update(cx, |block, cx| {
+                block.focus(window, cx);
+                // Only fails for an empty document, where the caret is
+                // already at the end.
+                block.select_end(cx).ok();
+            }),
+        }
+    }
+
+    fn move_caret_to(
+        &mut self,
+        point: gpui_kit::Point<gpui_kit::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.block.update(cx, |block, cx| {
+            if let Some(position) = block.position_at(point)
+                && block
+                    .set_selection(BlockSelection::caret(position), cx)
+                    .is_ok()
+            {
+                block.focus(window, cx);
+            }
+        });
+    }
+
+    /// The one path for paste, drop and pick: copy `sources` into the Item's
+    /// folder off the UI thread, then insert their Markdown, so a link is
+    /// never drawn before its file exists. `request` is the paste that
+    /// started it; whether or not it is still current, the Markdown goes in at
+    /// the caret as it is when the copying is done. `text` is the paste's
+    /// own text, used where files can't be inserted (a Code Block).
+    fn attach(
+        &mut self,
+        sources: Vec<Source>,
+        request: Option<PasteRequest>,
+        text: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(target) = self.target.clone() else {
+            return;
+        };
+        if sources.is_empty() || self.locked() {
+            return;
+        }
+        if self.mode == EditorMode::Block
+            && self.block.read(cx).block_kind_at_caret() == Some(BlockKind::CodeBlock)
+        {
+            // Files can't be linked inside code: their names go in as text.
+            let names = text.unwrap_or_else(|| Source::names(&sources));
+            self.block.update(cx, |block, cx| match &request {
+                Some(request) => {
+                    block.apply_paste(request, Some(&names), cx);
+                }
+                None => block.paste(ClipboardItem::new_string(names), true, cx),
+            });
+            return;
+        }
+        let store = self.model.read(cx).store();
+        let (space, item) = (target.space(), target.attachment_item());
+        cx.spawn_in(window, async move |this, cx| {
+            let attached = cx
+                .background_spawn(async move { attach::copy(&store, space, &item, sources) })
+                .await;
+            this.update_in(cx, |this, window, cx| {
+                this.attached(&target, attached, request, window, cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Reports what failed and inserts what was copied, as one undo step.
+    fn attached(
+        &mut self,
+        target: &EditorTarget,
+        attached: attach::Attached,
+        request: Option<PasteRequest>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(notice) = attached.notice() {
+            window.push_notification(Notification::error(notice), cx);
+        }
+        if let (Some(request), EditorMode::Block) = (&request, self.mode) {
+            // Settles the paste. A stale one is not refused: the Markdown
+            // goes in at the caret as it is now.
+            self.block
+                .update(cx, |block, cx| block.apply_paste(request, None, cx));
+        }
+        if attached.is_empty() {
+            return;
+        }
+        // The files are written either way; a link in another Item's body
+        // would point at the wrong folder.
+        if self.target.as_ref() != Some(target) {
+            return;
+        }
+        // Our own writes may not come back from the watcher.
+        self.refresh_attachments(window, cx);
+        let markdown = attached.markdown();
+        match self.mode {
+            EditorMode::Block => self.block.update(cx, |block, cx| {
+                if attached.as_blocks() {
+                    block.insert_markdown_blocks(&markdown, cx);
+                } else {
+                    block.insert_markdown(&markdown, cx);
+                }
+            }),
+            EditorMode::Raw => {
+                self.raw.update(cx, |raw, cx| {
+                    let text = raw.value();
+                    let inserted =
+                        attach::raw_insertion(&text, raw.cursor(), &markdown, attached.as_blocks());
+                    raw.replace(inserted, window, cx);
+                });
+                // Replacing through the state doesn't report a change.
+                self.body = self.raw.read(cx).value().to_string();
+                self.edited(window, cx);
+            }
+        }
+    }
+
     /// Creates the Note the Link Picker's last row offered, in the open
     /// Item's Project (none for a Space-level Note or a Journal Entry), and
     /// links to it. A failure is shown and leaves the typed text as it was.
@@ -856,7 +1076,11 @@ impl ItemEditor {
             .test_support()
             .aria_label(label)
             .flex_1()
-            .min_h_0();
+            .min_h_0()
+            .drag_over::<ExternalPaths>(|style, _, _, cx| {
+                style.bg(cx.theme().drag_border.opacity(0.08))
+            });
+        let this = cx.entity().downgrade();
         match self.mode {
             // The editor is only as tall as its text (the fork styles an inner
             // node), so the space below it puts the caret at the end.
@@ -866,25 +1090,46 @@ impl ItemEditor {
                 .overflow_y_scroll()
                 .track_scroll(&self.scroll)
                 .child(
-                    image_cache(self.images.clone())
-                        .child(BlockEditor::new(&self.block).px_8().pt_4()),
+                    // Drops on the text go at the caret under the pointer.
+                    drop_target(DropAt::Pointer, cx).child(
+                        image_cache(self.images.clone())
+                            .child(BlockEditor::new(&self.block).px_8().pt_4()),
+                    ),
                 )
-                .child(div().flex_grow(1.).min_h_16().cursor_text().on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|this, _, window, cx| {
-                        this.focus_end(window, cx);
-                        // Otherwise the shell takes focus back.
-                        window.prevent_default();
-                    }),
-                ))
+                .child(
+                    // Below the last block, a drop goes at the end.
+                    drop_target(DropAt::End, cx)
+                        .flex_grow(1.)
+                        .min_h_16()
+                        .cursor_text()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, window, cx| {
+                                this.focus_end(window, cx);
+                                // Otherwise the shell takes focus back.
+                                window.prevent_default();
+                            }),
+                        ),
+                )
                 .into_any_element(),
             EditorMode::Raw => body
+                .on_drop::<ExternalPaths>(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+                    this.dropped(paths, DropAt::Pointer, window, cx)
+                }))
                 .flex()
                 .flex_col()
                 .px_6()
                 .py_2()
                 .child(
                     Editor::new(&self.raw)
+                        .on_paste(move |item, window, cx| {
+                            let sources = Source::from_clipboard(item);
+                            if sources.is_empty() {
+                                return false;
+                            }
+                            this.update(cx, |this, cx| this.attach(sources, None, None, window, cx))
+                                .is_ok()
+                        })
                         .appearance(false)
                         .readonly(self.locked())
                         .size_full(),
@@ -892,6 +1137,31 @@ impl ItemEditor {
                 .into_any_element(),
         }
     }
+}
+
+/// Where in the block view a drop of files goes.
+#[derive(Clone, Copy)]
+enum DropAt {
+    /// The caret nearest the pointer.
+    Pointer,
+    /// The end of the body.
+    End,
+}
+
+/// A region of the block view that takes dropped files: the caret follows the
+/// pointer over it, and the drop goes in `at`.
+fn drop_target(at: DropAt, cx: &mut Context<ItemEditor>) -> gpui_kit::Div {
+    div()
+        .on_drag_move::<ExternalPaths>(cx.listener(
+            move |this, event: &DragMoveEvent<ExternalPaths>, window, cx| {
+                this.drag_caret(event, at, window, cx)
+            },
+        ))
+        .on_drop::<ExternalPaths>(cx.listener(move |this, paths: &ExternalPaths, window, cx| {
+            this.dropped(paths, at, window, cx);
+            // Otherwise the other region would take it too.
+            cx.stop_propagation();
+        }))
 }
 
 /// A long local date such as "Monday, 9 November 2026".

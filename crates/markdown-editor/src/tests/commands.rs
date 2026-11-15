@@ -1076,3 +1076,27 @@ fn insert_markdown_at_the_caret_puts_one_image_inline() {
     assert!(m.insert_markdown_at_caret("![x](x.png)").unwrap());
     assert_eq!(m.source(), "a ![x](x.png)b");
 }
+
+// FORK: blocks inserted as their own paragraphs (Attachments).
+
+#[test]
+fn inserting_blocks_mid_paragraph_splits_it_around_them() {
+    let mut m = model("a b");
+    caret_in(&mut m, 0, 2);
+    assert!(
+        m.insert_markdown_blocks_at_caret("![x](x.png)\n\n![y](y.png)")
+            .unwrap()
+    );
+    assert_eq!(m.source(), "a \n\n![x](x.png)\n\n![y](y.png)\n\nb");
+    assert!(m.undo());
+    assert_eq!(m.source(), "a b");
+}
+
+#[test]
+fn inserting_blocks_in_an_empty_paragraph_fills_it() {
+    let mut m = model("before\n\n/x\n\nafter");
+    let pos = caret_in(&mut m, 1, 2);
+    m.apply_insert_option(pos.block, EditorCommand::Host("attach".into()));
+    assert!(m.insert_markdown_blocks_at_caret("![x](x.png)").unwrap());
+    assert_eq!(m.source(), "before\n\n![x](x.png)\n\nafter");
+}
