@@ -132,7 +132,7 @@ fn copy_one(
             (attached, name, String::new())
         }
     };
-    let destination = &attached.destination;
+    let destination = markdown_editor::markdown_destination(&attached.destination);
     Ok(if attached.inline {
         Piece {
             markdown: format!("![{}]({destination})", escape(&alt)),
@@ -305,6 +305,35 @@ fn blank_lines_needed(mut near: impl Iterator<Item = char>) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn links_to_files_already_in_the_folder_are_escaped_at_any_depth() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let item = AttachmentItem::Note {
+            project: None,
+            slug: "plan".into(),
+        };
+        let folder = store.attachment_dir(Space::Personal, &item).unwrap();
+        std::fs::create_dir_all(folder.join("sub dir")).unwrap();
+        let top = folder.join("my (draft).pdf");
+        let deep = folder.join("sub dir/shot 1.png");
+        std::fs::write(&top, b"x").unwrap();
+        std::fs::write(&deep, b"x").unwrap();
+
+        let attached = copy(
+            &store,
+            Space::Personal,
+            &item,
+            vec![Source::Path(top), Source::Path(deep)],
+        );
+
+        assert_eq!(
+            attached.markdown(),
+            "[my (draft).pdf](<plan/my (draft).pdf>)\n\n![shot 1](<plan/sub dir/shot 1.png>)"
+        );
+        assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 2);
+    }
 
     #[test]
     fn the_notice_names_every_failure() {

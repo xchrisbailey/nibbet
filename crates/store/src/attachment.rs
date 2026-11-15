@@ -144,12 +144,17 @@ impl Store {
             .ok_or_else(|| invalid(format!("invalid path {source:?}")))?;
         let (stem, ext) = split_name(file_name);
 
-        // Already in this Item's folder: nothing to copy.
+        // Already in this Item's folder, at any depth: nothing to copy.
         if let (Ok(have), Ok(dir)) = (fs::canonicalize(source), fs::canonicalize(&folder))
-            && have.parent() == Some(dir.as_path())
+            && let Ok(inside) = have.strip_prefix(&dir)
         {
+            let relative = inside
+                .components()
+                .filter_map(|c| c.as_os_str().to_str())
+                .collect::<Vec<_>>()
+                .join("/");
             return Ok(Attached {
-                destination: format!("{slug}/{file_name}"),
+                destination: format!("{slug}/{relative}"),
                 name: stem.to_string(),
                 inline: is_inline_image(&ext),
             });

@@ -1850,8 +1850,9 @@ impl BlockEditorState {
 
     /// FORK: the caret position nearest a window point, as of the last
     /// frame, for the host to follow a file drag with `set_selection`. Below
-    /// the last block it is the end of the document; `None` before the first
-    /// frame.
+    /// the last block it is the nearest point in the last leaf, not the end
+    /// of the document (the host handles that itself); `None` before the
+    /// first frame.
     pub fn position_at(&self, point: Point<Pixels>) -> Option<BlockPosition> {
         self.frame.borrow().hit_test(point)
     }

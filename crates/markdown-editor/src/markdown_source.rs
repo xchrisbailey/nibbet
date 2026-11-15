@@ -10,7 +10,7 @@ use gpui::Hsla;
 use gpui_kit::base::text::editor_host::TextMark;
 
 /// Delimiter-safe shared writer seam for links, references and images.
-pub(crate) fn markdown_destination(value: &str) -> String {
+pub fn markdown_destination(value: &str) -> String {
     let angled = value
         .chars()
         .any(|ch| ch.is_whitespace() || matches!(ch, '(' | ')' | '<' | '>'));
