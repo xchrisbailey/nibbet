@@ -115,8 +115,7 @@ fn file_name(url: &str) -> Option<SharedString> {
 pub(crate) fn fit(natural: Size<Pixels>, max_w: Pixels, max_h: Pixels) -> Size<Pixels> {
     let scale = (max_w / natural.width)
         .min(max_h / natural.height)
-        .min(1.)
-        .max(0.);
+        .clamp(0., 1.);
     size(natural.width * scale, natural.height * scale)
 }
 
