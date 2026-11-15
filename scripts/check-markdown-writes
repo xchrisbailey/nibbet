@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# sett writes Markdown links and images into Items' files. A destination with a
+# space or a bracket breaks the link unless it goes through the fork's
+# `markdown_editor::markdown_destination` (and alt text through its escaping).
+# So every line in the app or store that builds `](` with format!/write!/
+# push_str must say it did, with a trailing `// md-escaped` comment.
+set -euo pipefail
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+
+hits="$(grep -rnE '(format!|write!|writeln!|push_str)\(.*\]\(' \
+    "$root/crates/app/src" "$root/crates/store/src" --include='*.rs' |
+    grep -v '// md-escaped' || true)"
+
+if [[ -n "$hits" ]]; then
+    echo "check-markdown-writes: these lines build a Markdown link without '// md-escaped'." >&2
+    echo "Pass the destination through markdown_editor::markdown_destination and escape the" >&2
+    echo "link text, then mark the line '// md-escaped':" >&2
+    echo "${hits//$root\//}" >&2
+    exit 1
+fi

@@ -15,7 +15,7 @@ Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
 ## Working here
 
 - **gpui-kit APIs:** check `docs/agents/gpui-kit-notes.md` first. It was verified against the 0.9.1 source, and the published docs lag behind it. It also covers testing gotchas.
-- **UI changes:** `scripts/screenshot OUT.png` captures the real window against fixture data. Read the PNG to check your layout. Building a spec with subagents: screenshot each UI ticket in the main session right after merging it, before the next ticket starts.
-- **Parallel worktrees:** `docs/agents/worktrees.md`.
+- **UI changes:** `scripts/screenshot OUT.png` captures the real window against fixture data. Read the PNG to check your layout.
+- **Worktrees:** any commit, merge or parallel agent: `docs/agents/worktrees.md`.
 - **Reviewing:** `CODING_STANDARDS.md`.
 - **Checks:** CI (`.github/workflows/ci.yml`) runs fmt, clippy and tests. Enable the pre-commit hook once per clone with `git config core.hooksPath .githooks`.

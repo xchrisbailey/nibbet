@@ -21,3 +21,7 @@ fi
 if git diff --cached --name-only | grep -q '\.rs$'; then
     cargo fmt --all --check
 fi
+
+if git diff --cached --name-only | grep -qE '^crates/(app|store)/src/'; then
+    scripts/check-markdown-writes
+fi

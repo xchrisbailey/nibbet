@@ -26,6 +26,19 @@ Imports: `use gpui_kit::*;` gives GPUI. `gpui_kit::component` re-exports `h_flex
 - **`crates/markdown-editor/FORK.md`** lists every patch to the forked block editor and why, including what gpui-kit keeps private (gpui-base's Code Block label, the syntect language lookup). Read it before changing the editor.
 - **The clipboard is plain text on macOS.** gpui writes one string plus its own private metadata tag, and reads back only that string, file paths and images. It never reads HTML or RTF, so what another app puts there as rich text (a rendered GitHub README's `<pre lang=…>`, VS Code's language id) never reaches sett.
 
+## Images, paste and drop
+
+Found while building Attachments (#112). The full research is on the `research/attachments-gpui` branch (`docs/research/attachments-gpui.md`).
+
+- **gpui-base's inline image element can't be styled.** `InlineFlow::image_element` (`B/text/inline_flow.rs`) is private and takes no style hook. So the fork draws host images itself (`crates/markdown-editor/src/image_object.rs`), and images in table cells still use the stock element.
+- **Custom inline objects are measured before the wrap width is known** (`prepare_objects` uses `AvailableSpace::MaxContent`). An object can't shrink itself to its column. `image_object.rs` shrinks to the leaf width recorded from the previous frame.
+- **gpui caches images by path for the life of the app, failures included.** Nothing reloads a changed file. Write a file before drawing a link to it, and clear the editor's `RetainAllImageCache` when files change on disk.
+- **Only `data:` image URLs load without help.** Every other URL goes to the HTTP client, and sett has none. The host resolves relative paths through the fork's `set_image_display`.
+- **`link_at` sees only text with a link mark.** Image atoms have none, so the fork falls back to the image's destination for ⌘-click.
+- **Under `ClipboardPolicy::Host` every paste goes through the host**, including plain text and the editor's own Code Block and Callout copies. Pass them on with `apply_paste`.
+- **gpui-kit's raw `Editor` has no copy hook.** To see a copy there, handle the `Copy` and `Cut` actions on a wrapper element.
+- **`position_at` below the last block gives the nearest point in the last leaf**, not the end of the document. A drop below the body needs its own target.
+
 ## Doc and source mismatches
 The `/component/*.md` doc pages disagree with the source in places:
 - `Sidebar::new` needs an id.
