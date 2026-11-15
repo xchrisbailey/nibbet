@@ -20,7 +20,7 @@ personal/ | work/            # Spaces: fully isolated, never link across them
     notes/<slug>.md
     notes/<slug>/            # that Item's Attachments (optional)
   templates/<slug>.md        # Templates: starter bodies, not Items
-  templates/<slug>/          # that Item's Attachments (optional)
+  templates/<slug>/          # that Template's Attachments (optional)
 ```
 
 `personal/` and `work/` are separate Spaces. Nothing in one may reference the

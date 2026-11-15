@@ -49,6 +49,7 @@ fn marked_block_is_replaced_and_text_outside_survives() {
     assert!(text.contains("labels:"), "marked files get the Labels docs");
     assert!(text.contains("An Item's Attachments (images and other files)"));
     assert!(text.contains("# that Item's Attachments (optional)"));
+    assert!(text.contains("# that Template's Attachments (optional)"));
 }
 
 #[test]

@@ -57,7 +57,7 @@ The list of Items that opens when the user types `[[` in an Item's body. Choosin
 _Avoid_: Mention, autocomplete, quick switcher
 
 **Attachment**:
-A file, such as an image or a PDF, that belongs to one Item and is linked from its body. Images show inline; other files show as a link that opens them.
+A file, such as an image or a PDF, that belongs to one Item or Template and is linked from its body. Images show inline; other files show as a link that opens them.
 _Avoid_: Asset, upload, media, embed
 
 **Callout**:
