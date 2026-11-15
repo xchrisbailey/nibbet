@@ -507,7 +507,7 @@ impl ItemEditor {
                     self.dirty = true;
                     self.flush(window, cx);
                 }
-                self.refresh_attachments(window, cx);
+                self.rebuild_attachments(cx);
                 self.model.update(cx, |_, cx| cx.notify());
             }
             Ok(_) => {}
@@ -697,6 +697,16 @@ impl ItemEditor {
     /// to ask again. Runs when an Item opens or reloads, and when a file in
     /// its folder changes.
     fn refresh_attachments(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.images
+            .update(cx, |images, cx| images.clear(window, cx));
+        self.rebuild_attachments(cx);
+    }
+
+    /// Like [`Self::refresh_attachments`] but keeps the decoded images, for
+    /// sett's own writes: a new file can't be among the images that failed to
+    /// load (it was written before its link), so clearing would only flash
+    /// every image back to its loading box.
+    fn rebuild_attachments(&mut self, cx: &mut Context<Self>) {
         let Some(target) = &self.target else {
             self.attachments = None;
             return;
@@ -707,8 +717,6 @@ impl ItemEditor {
             target.attachment_item(),
         ));
         self.attachments = Some(attachments.clone());
-        self.images
-            .update(cx, |images, cx| images.clear(window, cx));
         let for_images = attachments.clone();
         self.block.update(cx, |block, cx| {
             block.set_image_display(Arc::new(move |url| for_images.image_display(url)), cx);
@@ -839,7 +847,7 @@ impl ItemEditor {
         if self.target.as_ref() != Some(target) {
             return;
         }
-        self.refresh_attachments(window, cx);
+        self.rebuild_attachments(cx);
         self.block.update(cx, |block, cx| {
             // A stale paste is not refused: the text goes in at the caret as
             // it is now.
@@ -897,7 +905,7 @@ impl ItemEditor {
         if self.target.as_ref() != Some(target) {
             return;
         }
-        self.refresh_attachments(window, cx);
+        self.rebuild_attachments(cx);
         self.block
             .update(cx, |block, cx| block.insert_markdown(&carried.markdown, cx));
     }
@@ -1064,7 +1072,7 @@ impl ItemEditor {
             return;
         }
         // Our own writes may not come back from the watcher.
-        self.refresh_attachments(window, cx);
+        self.rebuild_attachments(cx);
         let markdown = attached.markdown();
         match self.mode {
             EditorMode::Block => self.block.update(cx, |block, cx| {
