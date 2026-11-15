@@ -491,6 +491,22 @@ impl Store {
         self.log.removed(self.rel(&from), &from);
         self.log.file(self.rel(&to), &content);
         fs::rename(&from, &to)?;
+
+        // The Template's Attachments go with it, so its body's links keep
+        // working once the app rewrites them.
+        let (old_folder, new_folder) = (dir.join(slug), dir.join(&new_slug));
+        if old_folder.is_dir() {
+            self.log.removed(self.rel(&old_folder), &old_folder);
+            self.log.dir(self.rel(&new_folder));
+            if let Err(err) = fs::rename(&old_folder, &new_folder) {
+                // Leave nothing half moved: the file goes back, and the
+                // log marks are replaced by what is really on disk.
+                self.log.file(self.rel(&from), &content);
+                self.log.removed(self.rel(&to), &to);
+                fs::rename(&to, &from)?;
+                return Err(err);
+            }
+        }
         Ok(new_slug)
     }
 

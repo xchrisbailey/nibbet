@@ -395,3 +395,38 @@ fn a_leftover_folder_makes_its_slug_taken() {
         "renamed-2"
     );
 }
+
+#[test]
+fn renaming_a_template_moves_its_attachment_folder() {
+    let (_dir, store, _) = new_store();
+    let space = store.root().join("work");
+    let tpl = store.create_template(SPACE, "Bug").unwrap();
+    fs::create_dir_all(space.join("templates/bug")).unwrap();
+    fs::write(space.join("templates/bug/shot.png"), b"png").unwrap();
+
+    assert_eq!(
+        store.rename_template(SPACE, &tpl.slug, "Defect").unwrap(),
+        "defect"
+    );
+    assert_eq!(
+        fs::read(space.join("templates/defect/shot.png")).unwrap(),
+        b"png"
+    );
+    assert!(!space.join("templates/bug").exists());
+}
+
+#[test]
+fn a_failed_folder_rename_rolls_the_template_file_back() {
+    let (_dir, store, _) = new_store();
+    let space = store.root().join("work");
+    let tpl = store.create_template(SPACE, "Bug").unwrap();
+    fs::create_dir_all(space.join("templates/bug")).unwrap();
+    // A plain file where the folder would go makes the folder move fail.
+    // (`defect` as a file with no `.md` is not a taken slug.)
+    fs::write(space.join("templates/defect"), b"in the way").unwrap();
+
+    assert!(store.rename_template(SPACE, &tpl.slug, "Defect").is_err());
+    assert!(space.join("templates/bug.md").is_file());
+    assert!(!space.join("templates/defect.md").exists());
+    assert!(space.join("templates/bug").is_dir());
+}
