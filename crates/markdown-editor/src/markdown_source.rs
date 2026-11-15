@@ -10,7 +10,7 @@ use gpui::Hsla;
 use gpui_kit::base::text::editor_host::TextMark;
 
 /// Delimiter-safe shared writer seam for links, references and images.
-pub(crate) fn markdown_destination(value: &str) -> String {
+pub fn markdown_destination(value: &str) -> String {
     let angled = value
         .chars()
         .any(|ch| ch.is_whitespace() || matches!(ch, '(' | ')' | '<' | '>'));
@@ -583,4 +583,181 @@ fn autolink_safe(url: &str) -> bool {
         && !url
             .chars()
             .any(|ch| ch.is_whitespace() || ch.is_control() || matches!(ch, '<' | '>'))
+}
+
+/// FORK: rewrite the destinations of inline images and links. `f` gets each
+/// destination as the parser reads it (unescaped, without `<…>`); `None`
+/// keeps it, `Some` replaces it, written with [`markdown_destination`].
+/// Only those byte ranges change: reference definitions, reference-style
+/// links, autolinks, Code Blocks, code spans and all other text stay as
+/// written.
+pub fn map_destinations(markdown: &str, mut f: impl FnMut(&str) -> Option<String>) -> String {
+    use ::markdown::{ParseOptions, mdast::Node, to_mdast};
+
+    fn collect(node: &Node, source: &str, out: &mut Vec<(usize, usize, String)>) {
+        let url = match node {
+            Node::Link(link) => Some(&link.url),
+            Node::Image(image) => Some(&image.url),
+            _ => None,
+        };
+        if let (Some(url), Some(position)) = (url, node.position())
+            && let Some((start, end)) =
+                destination_range(source, position.start.offset, position.end.offset)
+        {
+            out.push((start, end, url.clone()));
+        }
+        for child in node.children().into_iter().flatten() {
+            collect(child, source, out);
+        }
+    }
+
+    // A parse failure (it can't happen without MDX) leaves the text as is.
+    let Ok(root) = to_mdast(markdown, &ParseOptions::gfm()) else {
+        return markdown.to_string();
+    };
+    let mut found = Vec::new();
+    collect(&root, markdown, &mut found);
+    found.sort_by_key(|(start, ..)| *start);
+
+    let mut out = String::with_capacity(markdown.len());
+    let mut at = 0;
+    for (start, end, url) in found {
+        let Some(new) = f(&url) else { continue };
+        out.push_str(&markdown[at..start]);
+        out.push_str(&markdown_destination(&new));
+        at = end;
+    }
+    out.push_str(&markdown[at..]);
+    out
+}
+
+/// The byte range of the destination (with its `<>`, if any) of the inline
+/// link or image written at `source[start..end]`. `None` for autolinks, bare
+/// URLs and anything else that isn't `[label](destination …)`. mdast gives a
+/// node's range but not its parts, so this walks the label to find where the
+/// destination starts.
+fn destination_range(source: &str, start: usize, end: usize) -> Option<(usize, usize)> {
+    let text = source.get(start..end)?;
+    let bytes = text.as_bytes();
+    let mut i = match bytes {
+        [b'!', b'[', ..] => 2,
+        [b'[', ..] => 1,
+        _ => return None,
+    };
+    // The label ends at its matching `]`; escapes and code spans can hide
+    // brackets inside it.
+    let mut depth = 1;
+    while depth > 0 {
+        match *bytes.get(i)? {
+            b'\\' => i += 1,
+            b'`' => {
+                let run = bytes[i..].iter().take_while(|b| **b == b'`').count();
+                let closing = text[i + run..]
+                    .match_indices(&"`".repeat(run))
+                    .find(|(at, _)| {
+                        let after = i + run + at + run;
+                        bytes.get(after) != Some(&b'`')
+                            && (*at == 0 || bytes[i + run + at - 1] != b'`')
+                    });
+                match closing {
+                    Some((at, _)) => i += run + at + run - 1,
+                    None => i += run - 1,
+                }
+            }
+            b'[' => depth += 1,
+            b']' => depth -= 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    if bytes.get(i) != Some(&b'(') {
+        return None;
+    }
+    i += 1;
+    while bytes.get(i)?.is_ascii_whitespace() {
+        i += 1;
+    }
+    let dest = i;
+    if bytes[i] == b'<' {
+        i += 1;
+        loop {
+            match *bytes.get(i)? {
+                b'\\' => i += 1,
+                b'>' => break,
+                _ => {}
+            }
+            i += 1;
+        }
+        i += 1;
+    } else {
+        let mut parens = 0;
+        while let Some(&b) = bytes.get(i) {
+            match b {
+                b'\\' => i += 1,
+                b'(' => parens += 1,
+                b')' if parens == 0 => break,
+                b')' => parens -= 1,
+                b if b.is_ascii_whitespace() => break,
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+    Some((start + dest, start + i))
+}
+
+#[cfg(test)]
+mod map_destinations_tests {
+    use super::map_destinations;
+
+    fn upper(url: &str) -> Option<String> {
+        Some(url.to_uppercase())
+    }
+
+    #[test]
+    fn rewrites_images_and_links() {
+        let src = "see [a *b*](x.md \"t\") and ![alt](pic.png) ok\n\n[](empty.md)";
+        assert_eq!(
+            map_destinations(src, upper),
+            "see [a *b*](X.MD \"t\") and ![alt](PIC.PNG) ok\n\n[](EMPTY.MD)"
+        );
+    }
+
+    #[test]
+    fn reads_angle_destinations_and_writes_them_back_when_needed() {
+        let src = "![a](<my pic.png>) [b](<x(1).md> 'T')";
+        let mut seen = Vec::new();
+        let out = map_destinations(src, |url| {
+            seen.push(url.to_string());
+            Some(format!("{url}2"))
+        });
+        assert_eq!(seen, ["my pic.png", "x(1).md"]);
+        assert_eq!(out, "![a](<my pic.png2>) [b](<x(1).md2> 'T')");
+    }
+
+    #[test]
+    fn none_keeps_a_destination_and_identity_is_a_no_op() {
+        let src = "![a](keep.png) and [b](<odd one>)  \n\n    [x](y)\n";
+        let out = map_destinations(src, |url| {
+            (url != "keep.png").then(|| "new.png".to_string())
+        });
+        assert_eq!(out, "![a](keep.png) and [b](new.png)  \n\n    [x](y)\n");
+        assert_eq!(map_destinations(src, |_| None), src);
+    }
+
+    #[test]
+    fn leaves_code_definitions_and_references_alone() {
+        let src = "`![a](x.png)`\n\n```md\n[b](y.md)\n```\n\n    ![c](z.png)\n\n[r][ref] ![i][ref] <https://e.com>\n\n[ref]: def.png\n\n![ok](a.png)";
+        let out = map_destinations(src, upper);
+        assert_eq!(out, src.replace("![ok](a.png)", "![ok](A.PNG)"));
+    }
+
+    #[test]
+    fn handles_brackets_in_labels_and_multibyte_text() {
+        let src = "é [a [b] `]` c](x.md) ![ü\\]](y.png)";
+        assert_eq!(
+            map_destinations(src, upper),
+            "é [a [b] `]` c](X.MD) ![ü\\]](Y.PNG)"
+        );
+    }
 }

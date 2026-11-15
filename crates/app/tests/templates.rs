@@ -260,3 +260,41 @@ fn renaming_a_template_works_in_the_templates_own_space(cx: &mut TestAppContext)
     assert_eq!(slug, "new");
     assert!(work.join("new.md").exists() && !work.join("old.md").exists());
 }
+
+#[gpui_kit::test]
+fn renaming_a_template_moves_its_attachments_and_rewrites_the_links(cx: &mut TestAppContext) {
+    let f = open_shell(cx);
+    let old = write_template(cx, &f, "bug", "Bug");
+    fs::write(
+        &old,
+        "---\ntitle: Bug\n---\n![shot](bug/shot.png)\n\n[other](bugs/x.png) [web](https://x.test/bug/a.png)\n",
+    )
+    .unwrap();
+    fs::create_dir_all(templates_dir(&f).join("bug")).unwrap();
+    fs::write(templates_dir(&f).join("bug/shot.png"), b"png").unwrap();
+    let model = f.model(cx);
+    cx.update(|cx| model.update(cx, |w, cx| w.apply_change(template_change("bug"), cx)));
+    show_templates(cx, &f);
+    open_template(cx, &f, "bug");
+
+    cx.update_window(f.window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("note-title", cx);
+    })
+    .unwrap();
+    common::press(cx, &f, "secondary-a");
+    common::input(cx, &f, "Defect");
+    common::press(cx, &f, "enter");
+    settle(cx);
+
+    let new = templates_dir(&f).join("defect.md");
+    let text = fs::read_to_string(&new).unwrap();
+    assert!(text.contains("![shot](defect/shot.png)"), "{text}");
+    assert!(text.contains("[other](bugs/x.png)"), "{text}");
+    assert!(text.contains("(https://x.test/bug/a.png)"), "{text}");
+    assert_eq!(
+        fs::read(templates_dir(&f).join("defect/shot.png")).unwrap(),
+        b"png"
+    );
+    assert!(!templates_dir(&f).join("bug").exists());
+}

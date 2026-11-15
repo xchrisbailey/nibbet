@@ -1,5 +1,8 @@
 //! `BlockEditorState`: the entity around [`BlockEditorModel`] (design §6).
 
+use super::host_display::{
+    AttachmentIconPlugin, ImageDisplayFn, ImagePlaceholderPlugin, LinkDecorationFn,
+};
 use super::input_rule::RuleKind;
 use std::sync::Arc;
 use std::{cell::RefCell, ops::Range, rc::Rc};
@@ -10,6 +13,7 @@ use gpui::{
     Window, actions,
 };
 
+use super::image_object::{ImageObjectPlugin, ImageWidths};
 use super::wiki_link::{
     DirectoryHandle, HoverHandle, WikiChipPlugin, WikiLinkDirectory, WikiLinkState,
 };
@@ -429,6 +433,12 @@ pub enum BlockEditorEvent {
     },
     Focus,
     Blur,
+    /// FORK: an Insert Menu option with an [`EditorCommand::Host`] was
+    /// picked. The typed `/query` is gone and the caret is in the empty
+    /// block; the host inserts later with `paste` or `insert_markdown`.
+    InsertMenuHost {
+        id: SharedString,
+    },
     /// FORK: the Link Picker's "Create Note" row was picked. The host creates
     /// the Note and answers with [`BlockEditorState::complete_link_pick`];
     /// if it can't, it does nothing and the typed text stays as it was.
@@ -438,6 +448,14 @@ pub enum BlockEditorEvent {
     /// Enter requested submission; emitted only outside IME composition. The
     /// owner applies completion/picker and domain-send policy, in that order.
     SubmitRequested,
+    /// FORK: the editor put `text` on the clipboard (a copy or a cut).
+    /// `markdown` is whether it is the editor's own Markdown copy (inline
+    /// or blocks) rather than raw code, so the host can tell later whether a
+    /// paste is this text coming back.
+    Copied {
+        text: SharedString,
+        markdown: bool,
+    },
     /// Semantic paste interception, shared by keyboard and native actions.
     /// The owner must resolve this request with `apply_paste`; stale requests
     /// are rejected instead of pasting into a later selection/document.
@@ -521,6 +539,8 @@ pub struct BlockEditorState {
     wiki_links: DirectoryHandle,
     /// FORK: the chip under the pointer while Cmd/Ctrl is held.
     wiki_hover: HoverHandle,
+    /// FORK: the widths the image objects wrap at.
+    pub(crate) image_widths: ImageWidths,
     /// An IME composition opened an undo group that is not committed yet.
     composition_open: bool,
     /// Remembered x for repeated up/down.
@@ -535,6 +555,10 @@ pub struct BlockEditorState {
     /// `callout_menu.rs`.
     pub(crate) readonly: bool,
     image_policy: super::ImagePolicy,
+    /// FORK: the host's say on how each image shows.
+    pub(crate) image_display: Option<Arc<ImageDisplayFn>>,
+    /// FORK: the host's say on how each link is decorated.
+    link_decoration: Option<Arc<LinkDecorationFn>>,
     submit_policy: SubmitPolicy,
     clipboard_policy: ClipboardPolicy,
     paste_sequence: u64,
@@ -605,10 +629,17 @@ impl BlockEditorState {
         // FORK: the Link chip plugin reads the directory through this handle.
         let wiki_links = DirectoryHandle::default();
         let wiki_hover = HoverHandle::default();
-        let extensions = MarkdownExtensions::default().plugin(WikiChipPlugin {
-            directory: wiki_links.clone(),
-            hover: wiki_hover.clone(),
-        });
+        let image_widths = ImageWidths::default();
+        let extensions = MarkdownExtensions::default()
+            .plugin(WikiChipPlugin {
+                directory: wiki_links.clone(),
+                hover: wiki_hover.clone(),
+            })
+            .plugin(ImagePlaceholderPlugin)
+            .plugin(ImageObjectPlugin {
+                widths: image_widths.clone(),
+            })
+            .plugin(AttachmentIconPlugin);
         let model = BlockEditorModel::from_markdown("", extensions)
             .unwrap_or_else(|_| unreachable!("empty source always parses"));
         Self {
@@ -625,6 +656,7 @@ impl BlockEditorState {
             marked: None,
             wiki_links,
             wiki_hover,
+            image_widths,
             composition_open: false,
             goal_x: None,
             dragging: false,
@@ -633,6 +665,8 @@ impl BlockEditorState {
             readonly: false,
             toolbar_hidden: false,
             image_policy: super::ImagePolicy::default(),
+            image_display: None,
+            link_decoration: None,
             submit_policy: SubmitPolicy::default(),
             clipboard_policy: ClipboardPolicy::default(),
             paste_sequence: 0,
@@ -874,6 +908,40 @@ impl BlockEditorState {
     }
     pub fn image_policy(&self) -> super::ImagePolicy {
         self.image_policy
+    }
+
+    /// FORK: lets the host decide how each image shows, from its raw
+    /// destination: load it from a source it picks, or draw a placeholder
+    /// chip. The Markdown is the same either way. Without it, images load as
+    /// before (`ImagePolicy` still applies).
+    ///
+    /// The callback runs when a leaf holding the image is projected and, for a
+    /// loaded image, on every frame, so it must be cheap: no disk access.
+    /// When its answers change (a file appeared), call this again. `data:`
+    /// images never reach it; the editor always decodes those itself.
+    pub fn set_image_display(&mut self, display: Arc<ImageDisplayFn>, cx: &mut Context<Self>) {
+        self.image_display = Some(display);
+        self.sync_host_display(cx);
+    }
+
+    /// FORK: lets the host decorate links from their raw destination: a
+    /// paperclip before an Attachment, or a muted, struck-through link for a
+    /// missing one. The Markdown is the same either way. The callback runs
+    /// when a leaf holding the link is projected; call this again when its
+    /// answers change.
+    pub fn set_link_decoration(
+        &mut self,
+        decoration: Arc<LinkDecorationFn>,
+        cx: &mut Context<Self>,
+    ) {
+        self.link_decoration = Some(decoration);
+        self.sync_host_display(cx);
+    }
+
+    fn sync_host_display(&mut self, cx: &mut Context<Self>) {
+        self.projection
+            .set_host_display(self.image_display.clone(), self.link_decoration.clone());
+        cx.notify();
     }
 
     pub fn caret_prefix_snapshot(&self) -> Option<SharedString> {
@@ -1127,6 +1195,27 @@ impl BlockEditorState {
             .text_ranges(range)
             .into_iter()
             .map(|(id, lo, hi)| (id, lo..hi))
+            .collect()
+    }
+
+    /// FORK: the image atoms inside the selection, as leaf byte ranges, for
+    /// their selection ring.
+    pub(crate) fn selected_images(&self) -> Vec<(BlockId, Range<usize>)> {
+        self.selection_ranges()
+            .into_iter()
+            .flat_map(|(block, range)| {
+                self.model
+                    .doc
+                    .inline(block)
+                    .into_iter()
+                    .flat_map(|inline| inline.pieces())
+                    .filter(move |(piece, _, atom)| {
+                        matches!(atom, Some(super::inline::InlineAtom::Image(_)))
+                            && range.start <= piece.start
+                            && piece.end <= range.end
+                    })
+                    .map(move |(piece, _, _)| (block, piece))
+            })
             .collect()
     }
 
@@ -1759,6 +1848,40 @@ impl BlockEditorState {
         self.frame.borrow().callout_header_at(at)
     }
 
+    /// FORK: the caret position nearest a window point, as of the last
+    /// frame, for the host to follow a file drag with `set_selection`. Below
+    /// the last block it is the nearest point in the last leaf, not the end
+    /// of the document (the host handles that itself); `None` before the
+    /// first frame.
+    pub fn position_at(&self, point: Point<Pixels>) -> Option<BlockPosition> {
+        self.frame.borrow().hit_test(point)
+    }
+
+    /// FORK: insert Markdown at the caret as the editor's own block paste
+    /// does (several blocks, marks and images kept), as one undo step and
+    /// without the clipboard. A selection is replaced.
+    pub fn insert_markdown(&mut self, markdown: &str, cx: &mut Context<Self>) {
+        self.end_composition();
+        self.edit(
+            EditOrigin::Paste,
+            |model| model.insert_markdown_at_caret(markdown).map(drop),
+            cx,
+        );
+    }
+
+    /// FORK: like [`Self::insert_markdown`], but each block stays a block of
+    /// its own: a paragraph holding the caret is split around them, and an
+    /// empty one is filled. For images and files that must not merge into
+    /// the surrounding text.
+    pub fn insert_markdown_blocks(&mut self, markdown: &str, cx: &mut Context<Self>) {
+        self.end_composition();
+        self.edit(
+            EditOrigin::Paste,
+            |model| model.insert_markdown_blocks_at_caret(markdown).map(drop),
+            cx,
+        );
+    }
+
     /// FORK: the Code Block whose language label is drawn under the window
     /// point `at`, as of the last frame; a click on it opens the Language Menu.
     pub fn code_label_at(&self, at: Point<Pixels>) -> Option<BlockId> {
@@ -1818,8 +1941,14 @@ impl BlockEditorState {
     /// Cmd/Ctrl+click: emit [`BlockEditorEvent::LinkClicked`] for the link
     /// under `at`. Returns whether there was one.
     pub(crate) fn follow_link_at(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) -> bool {
-        match self.link_at(at) {
-            Some((_, _, url)) => {
+        // FORK: an image follows too, with its destination, unless it sits
+        // inside a link, whose mark wins.
+        match self
+            .link_at(at)
+            .map(|(_, _, url)| url)
+            .or_else(|| self.image_url_at(at))
+        {
+            Some(url) => {
                 cx.emit(BlockEditorEvent::LinkClicked { url });
                 true
             }
@@ -1874,7 +2003,9 @@ impl BlockEditorState {
 
     /// FORK: the keyboard route to following a Link: emit
     /// [`BlockEditorEvent::WikiLinkClicked`] for the one the caret is in or
-    /// touches. Elsewhere the key passes on.
+    /// touches. Failing that, a link or image the caret is in, next to or
+    /// has selected emits [`BlockEditorEvent::LinkClicked`] as Cmd/Ctrl-click
+    /// does. Elsewhere the key passes on.
     pub(crate) fn on_follow_wiki_link(
         &mut self,
         _: &FollowWikiLink,
@@ -1886,8 +2017,44 @@ impl BlockEditorState {
                 slug: chip.slug.into(),
                 heading: chip.heading,
             }),
-            None => cx.propagate(),
+            None => match self.link_at_caret().or_else(|| self.selected_image_url()) {
+                Some(url) => cx.emit(BlockEditorEvent::LinkClicked { url }),
+                None => cx.propagate(),
+            },
         }
+    }
+
+    /// FORK: the destination of the image atom drawn under `at`.
+    fn image_url_at(&self, at: Point<Pixels>) -> Option<SharedString> {
+        let (block, range) = {
+            let frame = self.frame.borrow();
+            let pos = frame.hit_test(at)?;
+            let leaf = frame.leaf(pos.block)?;
+            if !leaf.bounds().contains(&at) {
+                return None;
+            }
+            (pos.block, leaf.atom_at(at)?)
+        };
+        self.image_url_in(block, &range)
+    }
+
+    /// FORK: the url of the first image inside the selection.
+    fn selected_image_url(&self) -> Option<SharedString> {
+        let (block, range) = self.selected_images().into_iter().next()?;
+        self.image_url_in(block, &range)
+    }
+
+    fn image_url_in(&self, block: BlockId, range: &Range<usize>) -> Option<SharedString> {
+        self.model
+            .doc
+            .inline(block)?
+            .pieces()
+            .find_map(|(piece, _, atom)| match atom {
+                Some(super::inline::InlineAtom::Image(image)) if piece == *range => {
+                    Some(image.url.to_string().into())
+                }
+                _ => None,
+            })
     }
 
     /// FORK: Cmd/Ctrl+click: emit [`BlockEditorEvent::WikiLinkClicked`] for
@@ -2829,9 +2996,15 @@ impl BlockEditorState {
         if text.is_empty() {
             return;
         }
+        let markdown = matches!(kind, CopyKind::Inline | CopyKind::Blocks);
         cx.write_to_clipboard(match kind.tag() {
-            Some(tag) => ClipboardItem::new_string_with_metadata(text, tag),
-            None => ClipboardItem::new_string(text),
+            Some(tag) => ClipboardItem::new_string_with_metadata(text.clone(), tag),
+            None => ClipboardItem::new_string(text.clone()),
+        });
+        // FORK: lets the host remember where the text came from.
+        cx.emit(BlockEditorEvent::Copied {
+            text: text.into(),
+            markdown,
         });
     }
     pub(crate) fn on_cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
@@ -3205,6 +3378,7 @@ fn command_name(command: &EditorCommand) -> &'static str {
         EditorCommand::SetCallout(_) => "set_callout",
         EditorCommand::InsertCallout(_) => "insert_callout",
         EditorCommand::InsertMarkdown(_) => "insert_markdown",
+        EditorCommand::Host(_) => "host",
         EditorCommand::SetTaskChecked(_) => "set_task_checked",
         EditorCommand::Indent => "indent",
         EditorCommand::Outdent => "outdent",

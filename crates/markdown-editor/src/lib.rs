@@ -61,6 +61,8 @@ mod element;
 mod frame;
 mod host;
 mod id;
+// FORK: loaded images drawn with a border and a height cap.
+mod image_object;
 mod import;
 mod inline;
 mod input_rule;
@@ -75,6 +77,8 @@ mod language_menu;
 mod link_picker;
 mod markdown_source;
 mod marks;
+// FORK: how the host shows images and links.
+mod host_display;
 // FORK: Links drawn as title chips.
 mod wiki_chip;
 mod wiki_link;
@@ -108,6 +112,8 @@ pub use element::BlockEditor;
 pub use gpui_kit::base::text::editor_host::ColumnAlign;
 pub use input_rule::InputRule;
 pub use insert_menu::InsertMenuOption;
+// FORK
+pub use markdown_source::{map_destinations, markdown_destination};
 // FORK: the language lookup and the Language Menu's list.
 pub use language::{CODE_BLOCK_LANGUAGES, display_name, highlights};
 pub use link_picker::LinkCandidate;
@@ -141,6 +147,7 @@ pub use selection::{BlockSelection, SelectionError};
 pub use transaction::{EditOrigin, Transaction};
 
 pub use host::{CapturedRange, CapturedRangeError, SourceSnapshot};
+pub use host_display::{ImageDisplay, ImageDisplayFn, LinkDecoration, LinkDecorationFn};
 
 /// Whether image atoms may load resources while the editor presents them.
 /// `Placeholder` keeps the atomic document, source and selection but never

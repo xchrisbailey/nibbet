@@ -58,6 +58,8 @@ impl CenterPanel {
                 AppModelEvent::OpenTemplate(slug) => this
                     .templates
                     .update(cx, |view, cx| view.open_template(slug, window, cx)),
+                // The open editor handles it.
+                AppModelEvent::AttachmentChanged(_) => {}
             }
             cx.notify();
         });
