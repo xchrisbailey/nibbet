@@ -2,6 +2,7 @@
 //! built on `sett-store`.
 
 mod app_model;
+mod attach;
 mod attachments;
 mod board;
 mod center;
