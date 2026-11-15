@@ -4481,3 +4481,202 @@ fn a_long_menu_is_capped_and_scrolls(cx: &mut TestAppContext) {
     let row = cx.update(|window, _| window.find_by_label("Template 29").bounds());
     assert!(menu.contains(&row.center()), "{row:?} outside {menu:?}");
 }
+
+const PNG_30X20: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAUCAIAAAAVyRqTAAAAHUlEQVR4nGNooBlgGDV61OhRo0eNHjV61OihaDQA+o2ELgHZadsAAAAASUVORK5CYII=";
+
+/// Opens an editor the host has configured before its first frame, with a
+/// fake HTTP client that counts requests.
+fn open_hosted<'a>(
+    cx: &'a mut TestAppContext,
+    source: &str,
+    configure: impl FnOnce(&mut BlockEditorState, &mut Context<BlockEditorState>) + 'static,
+) -> (
+    Entity<BlockEditorState>,
+    &'a mut VisualTestContext,
+    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+) {
+    use std::sync::{Arc, atomic::AtomicUsize};
+    let requests = Arc::new(AtomicUsize::new(0));
+    let count = requests.clone();
+    cx.update(|cx| {
+        cx.set_http_client(gpui::http_client::FakeHttpClient::create(move |_| {
+            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async { Err(anyhow::anyhow!("fake client: outbound loading forbidden")) }
+        }));
+        crate::init_for_tests(cx);
+    });
+    let source = source.to_string();
+    let (root, cx) = cx.add_window_view(move |window, cx| {
+        Root(cx.new(|cx| {
+            let mut state = BlockEditorState::new(window, cx).with_source(&source);
+            configure(&mut state, cx);
+            state
+        }))
+    });
+    let editor = root.read_with(cx, |root, _| root.0.clone());
+    cx.update(|window, cx| {
+        let focus = editor.read(cx).focus_handle.clone();
+        window.focus(&focus, cx);
+    });
+    draw(cx);
+    (editor, cx, requests)
+}
+
+/// Width of the first leaf's atom at `offset`, as drawn.
+fn atom_width(
+    editor: &Entity<BlockEditorState>,
+    cx: &mut VisualTestContext,
+    offset: usize,
+) -> Pixels {
+    draw(cx);
+    editor.read_with(cx, |e, _| {
+        let id = e.model().document().leaves().next().unwrap().id();
+        let f = e.frame.borrow();
+        let leaf = f.leaf(id).unwrap();
+        leaf.caret_point(offset + 3).x - leaf.caret_point(offset).x
+    })
+}
+
+#[gpui::test]
+fn host_image_display_load_gets_the_raw_destination_and_its_source_is_used(
+    cx: &mut TestAppContext,
+) {
+    use crate::ImageDisplay;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
+    let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+    let loaded = Arc::new(AtomicBool::new(false));
+    let (seen, flag) = (asked.clone(), loaded.clone());
+    let initial = "![shot](fix-login/my%20shot.png)";
+    let (editor, cx, requests) = open_hosted(cx, initial, move |state, cx| {
+        state.set_image_display(
+            Arc::new(move |url| {
+                seen.lock().unwrap().push(url.to_string());
+                let flag = flag.clone();
+                ImageDisplay::Load(gpui::ImageSource::Custom(Arc::new(move |_, _| {
+                    flag.store(true, Ordering::SeqCst);
+                    None
+                })))
+            }),
+            cx,
+        );
+    });
+    draw(cx);
+    assert!(
+        asked
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|url| url == "fix-login/my%20shot.png")
+    );
+    assert!(!asked.lock().unwrap().is_empty());
+    assert!(
+        loaded.load(Ordering::SeqCst),
+        "gpui loaded the host's source"
+    );
+    assert_eq!(source(&editor, cx), initial);
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+}
+
+#[gpui::test]
+fn host_image_display_placeholder_draws_a_chip_and_keeps_the_source(cx: &mut TestAppContext) {
+    use crate::ImageDisplay;
+    use std::sync::{Arc, atomic::Ordering};
+    let initial = "a ![shot](https://attacker.example/x.png) b\n\n| t |\n| --- |\n| ![cell](https://attacker.example/c.png) |";
+    let (editor, cx, requests) = open_hosted(cx, initial, |state, cx| {
+        state.set_image_display(
+            Arc::new(|url| ImageDisplay::Placeholder {
+                icon: "globe".into(),
+                text: format!("Not loaded: {url}").into(),
+            }),
+            cx,
+        );
+    });
+    let chip = cx.update(|window, _| {
+        window
+            .find_by_label("Not loaded: https://attacker.example/x.png")
+            .bounds()
+    });
+    assert!(chip.size.width > px(40.), "{chip:?}");
+    assert_eq!(source(&editor, cx), initial);
+    editor.read_with(cx, |state, _| {
+        let atoms = state
+            .model()
+            .document()
+            .leaves()
+            .map(|leaf| {
+                state
+                    .model()
+                    .doc()
+                    .inline(leaf.id())
+                    .map_or(0, |text| text.atoms().len())
+            })
+            .sum::<usize>();
+        assert_eq!(atoms, 2, "the images stay atoms in the document");
+    });
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+}
+
+#[gpui::test]
+fn host_image_display_keeps_data_urls_rendering(cx: &mut TestAppContext) {
+    use crate::ImageDisplay;
+    use std::sync::{Arc, Mutex};
+    let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+    let seen = asked.clone();
+    let initial = format!("![d]({PNG_30X20})");
+    let (editor, cx, requests) = open_hosted(cx, &initial, move |state, cx| {
+        state.set_image_display(
+            Arc::new(move |url| {
+                seen.lock().unwrap().push(url.to_string());
+                ImageDisplay::Placeholder {
+                    icon: "image-off".into(),
+                    text: "no".into(),
+                }
+            }),
+            cx,
+        );
+    });
+    // Decoding runs on the background executor.
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(10));
+    draw(cx);
+    assert!(
+        asked.lock().unwrap().is_empty(),
+        "data: never reaches the host"
+    );
+    assert_eq!(atom_width(&editor, cx, 0), px(30.));
+    assert_eq!(source(&editor, cx), initial);
+    assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[gpui::test]
+fn host_link_decoration_adds_a_paperclip_and_leaves_the_source_alone(cx: &mut TestAppContext) {
+    use crate::LinkDecoration;
+    use std::sync::Arc;
+    let initial = "see [report](fix-login/report.pdf) and [gone](fix-login/gone.pdf) and [web](https://example.test)";
+    let (editor, cx, _) = open_hosted(cx, initial, |state, cx| {
+        state.set_link_decoration(
+            Arc::new(|url| match url {
+                "fix-login/report.pdf" => LinkDecoration::Attachment,
+                "fix-login/gone.pdf" => LinkDecoration::MissingAttachment,
+                _ => LinkDecoration::None,
+            }),
+            cx,
+        );
+    });
+    assert_eq!(source(&editor, cx), initial);
+    // One paperclip per decorated link, none for the plain one.
+    let clips = cx.update(|window, _| window.find_all_by_label("Attachment").len());
+    assert_eq!(clips, 2);
+    // Offsets still address the model's text: a caret inside "report" sits
+    // right of the paperclip, and typing there edits the right place.
+    // The model text is "see report and …": "report" is bytes 4..10.
+    caret_at(&editor, cx, 0, 8);
+    type_text(cx, "X");
+    assert_eq!(
+        source(&editor, cx),
+        initial.replacen("report]", "repoXrt]", 1)
+    );
+}

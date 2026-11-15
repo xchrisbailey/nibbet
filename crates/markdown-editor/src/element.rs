@@ -94,6 +94,13 @@ impl RenderOnce for BlockEditor {
             let style = render_cx.style().clone().with_table(table);
             render_cx.with_style(style)
         };
+        // FORK: the host decides how each image loads. gpui-base stops decoding
+        // `data:` URLs once a resolver is set, so the resolver does.
+        let render_cx = match self.state.read(cx).image_display.clone() {
+            Some(display) => render_cx
+                .with_image_source(move |uri| super::host_display::source_for(&*display, uri)),
+            None => render_cx,
+        };
         let text_style = render_cx.style().clone();
         let mut style = self.state.read(cx).style.resolved(&theme.tokens);
         if style.selection_is_default() {

@@ -4,16 +4,22 @@
 //! Every text leaf (paragraph, heading, code block, table cell) gets its
 //! `BlockId` as `editor_key`.
 
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, ops::Range, sync::Arc};
 
+use super::host_display::{
+    IMAGE_PLACEHOLDER, ImageDisplay, ImageDisplayFn, LinkDecoration, LinkDecorationFn,
+    PlaceholderData, attachment_icon_node, display_for,
+};
 use super::{
     document::{AtomData, BlockContent, EditorDocument},
     id::BlockId,
     inline::{InlineAtom, InlineText},
     kind::BlockKindData,
 };
-use gpui_kit::base::text::editor_host::{
-    BlockNode, BlockState, CodeBlock, InlineNode, Paragraph, Span, Table, TextMark,
+use gpui::SharedString;
+use gpui_kit::base::text::{
+    MarkdownNode,
+    editor_host::{BlockNode, BlockState, CodeBlock, InlineNode, Paragraph, Span, Table, TextMark},
 };
 
 /// A paragraph holding `inline`, keyed by `id`. `open` holds the Link spans
@@ -21,18 +27,23 @@ use gpui_kit::base::text::editor_host::{
 pub(crate) fn paragraph(
     inline: &InlineText,
     id: BlockId,
-    placeholders: bool,
+    display: &Display,
     open: &[Range<usize>],
 ) -> Paragraph {
     let mut paragraph = Paragraph::default();
+    // FORK: where a link starts that the host decorates.
+    let decorated = display.decorations(inline);
     // FORK: Links as chips. The text is cut at the Link spans.
     let spans = super::wiki_chip::chip_spans(inline);
     for (range, mark, atom) in inline.pieces() {
         match atom {
-            Some(InlineAtom::Image(image)) if placeholders => {
-                paragraph.push(image_placeholder(image).marks(vec![(0..1, mark.clone())]))
-            }
-            Some(InlineAtom::Image(image)) => paragraph.push(InlineNode::image(image.clone())),
+            Some(InlineAtom::Image(image)) => match display.image_placeholder(image) {
+                Some(node) => {
+                    let len = node.text().len();
+                    paragraph.push(node.marks(vec![(0..len, mark.clone())]))
+                }
+                None => paragraph.push(InlineNode::image(image.clone())),
+            },
             Some(InlineAtom::Custom(node)) => {
                 let node = InlineNode::custom(node.clone());
                 let len = node.text().len();
@@ -40,6 +51,26 @@ pub(crate) fn paragraph(
             }
             None => {
                 let mut at = range.start;
+                // FORK: host link decoration. The paperclip is an inline
+                // object before the link's first run; a missing Attachment is
+                // struck through and no longer drawn as a link (the model
+                // keeps the link, so following it still works).
+                let run = decorated
+                    .iter()
+                    .find(|d| d.start <= range.start && range.end <= d.end);
+                let mark = &match run {
+                    Some(d) if d.kind == LinkDecoration::MissingAttachment => TextMark {
+                        strikethrough: true,
+                        link: None,
+                        ..mark.clone()
+                    },
+                    _ => mark.clone(),
+                };
+                if let Some(d) = run.filter(|d| d.start == range.start) {
+                    let icon = attachment_icon_node(d.kind == LinkDecoration::MissingAttachment);
+                    let len = icon.text().len();
+                    paragraph.push(icon.marks(vec![(0..len, TextMark::default())]));
+                }
                 let push_text = |paragraph: &mut Paragraph, range: Range<usize>| {
                     let text = &inline.text()[range];
                     if !text.is_empty() {
@@ -86,17 +117,94 @@ pub(crate) fn paragraph(
 /// An image atom shown as its alt text, never loading the image. It is a
 /// custom inline object without a renderer, which draws its text fallback and
 /// stays one atomic caret and selection unit.
-fn image_placeholder(image: &gpui_kit::base::text::editor_host::ImageNode) -> InlineNode {
-    let label: gpui::SharedString = image
-        .alt
-        .clone()
-        .filter(|alt| !alt.is_empty())
-        .unwrap_or_else(|| "Image".into());
-    InlineNode::custom(
-        gpui_kit::base::text::MarkdownNode::new("image-placeholder", ())
-            .text(label.clone())
-            .accessibility_label(label),
-    )
+fn image_placeholder(
+    image: &gpui_kit::base::text::editor_host::ImageNode,
+    // FORK: the host's chip, an icon and a text. `None` is the plain-text
+    // placeholder of `ImagePolicy::Placeholder`.
+    chip: Option<(SharedString, SharedString)>,
+) -> InlineNode {
+    let label: SharedString = match &chip {
+        Some((_, text)) => text.clone(),
+        None => image
+            .alt
+            .clone()
+            .filter(|alt| !alt.is_empty())
+            .unwrap_or_else(|| "Image".into()),
+    };
+    let node = match chip {
+        Some((icon, text)) => MarkdownNode::new(IMAGE_PLACEHOLDER, PlaceholderData { icon, text }),
+        None => MarkdownNode::new(IMAGE_PLACEHOLDER, ()),
+    };
+    InlineNode::custom(node.text(label.clone()).accessibility_label(label))
+}
+
+/// FORK: what the host decides about how images and links are shown, as the
+/// projection sees it.
+#[derive(Default)]
+pub(crate) struct Display {
+    /// Present image atoms as text placeholders: nothing is resolved,
+    /// decoded or loaded (`ImagePolicy::Placeholder`).
+    pub(crate) placeholders: bool,
+    pub(crate) images: Option<Arc<ImageDisplayFn>>,
+    pub(crate) links: Option<Arc<LinkDecorationFn>>,
+}
+
+/// A link run the host decorates, in model offsets.
+pub(crate) struct DecoratedLink {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) kind: LinkDecoration,
+}
+
+impl Display {
+    /// The placeholder to draw for `image`, or `None` to let the renderer
+    /// load it.
+    fn image_placeholder(
+        &self,
+        image: &gpui_kit::base::text::editor_host::ImageNode,
+    ) -> Option<InlineNode> {
+        if self.placeholders {
+            return Some(image_placeholder(image, None));
+        }
+        let images = self.images.as_deref()?;
+        match display_for(images, &image.url)? {
+            ImageDisplay::Placeholder { icon, text } => {
+                Some(image_placeholder(image, Some((icon, text))))
+            }
+            ImageDisplay::Load(_) => None,
+        }
+    }
+
+    /// The link runs of `inline` the host decorates. A run is a stretch of
+    /// text with the same destination, whatever its other marks.
+    pub(crate) fn decorations(&self, inline: &InlineText) -> Vec<DecoratedLink> {
+        let Some(decorate) = self.links.as_deref() else {
+            return Vec::new();
+        };
+        let mut runs: Vec<(DecoratedLink, SharedString)> = Vec::new();
+        for (range, mark, atom) in inline.pieces() {
+            let Some(link) = mark.link.as_ref().filter(|_| atom.is_none()) else {
+                continue;
+            };
+            match runs.last_mut() {
+                Some((run, url)) if run.end == range.start && *url == link.url => {
+                    run.end = range.end;
+                }
+                _ => match decorate(&link.url) {
+                    LinkDecoration::None => {}
+                    kind => runs.push((
+                        DecoratedLink {
+                            start: range.start,
+                            end: range.end,
+                            kind,
+                        },
+                        link.url.clone(),
+                    )),
+                },
+            }
+        }
+        runs.into_iter().map(|(run, _)| run).collect()
+    }
 }
 
 /// Project one block (and its subtree), uncached.
@@ -112,9 +220,8 @@ pub(crate) fn project_block(doc: &EditorDocument, id: BlockId) -> Option<BlockNo
 /// (sharing its retained `InlineState`s).
 #[derive(Default)]
 pub(crate) struct NodeCache {
-    /// Present image atoms as text placeholders: nothing is resolved,
-    /// decoded or loaded (`ImagePolicy::Placeholder`).
-    pub(crate) placeholders: bool,
+    /// FORK: how the host shows images and links.
+    pub(crate) display: Display,
     /// FORK: the Link spans shown as source, by leaf.
     open: super::wiki_chip::OpenSpans,
     nodes: HashMap<BlockId, (u64, BlockNode)>,
@@ -194,9 +301,9 @@ impl NodeCache {
                     .iter()
                     .map(|cell| match doc.inline(*cell) {
                         Some(inline) => {
-                            paragraph(inline, *cell, self.placeholders, &self.open.of(*cell))
+                            paragraph(inline, *cell, &self.display, &self.open.of(*cell))
                         }
-                        None => paragraph(&InlineText::new(), *cell, self.placeholders, &[]),
+                        None => paragraph(&InlineText::new(), *cell, &self.display, &[]),
                     })
                     .collect();
                 self.rows.insert(id, (revision, row.clone()));
@@ -215,8 +322,8 @@ impl NodeCache {
         };
         let open = self.open.of(id);
         let inline = || match &entry.content {
-            BlockContent::Inline(inline) => paragraph(inline, id, self.placeholders, &open),
-            _ => paragraph(&InlineText::new(), id, self.placeholders, &[]),
+            BlockContent::Inline(inline) => paragraph(inline, id, &self.display, &open),
+            _ => paragraph(&InlineText::new(), id, &self.display, &[]),
         };
         Some(match &entry.kind {
             BlockKindData::Root => BlockNode::Root {

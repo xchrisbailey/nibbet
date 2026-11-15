@@ -177,7 +177,7 @@ impl LeafGeom {
         let Some(chips) = &self.info.chips else {
             return Some(rendered);
         };
-        if chips.span_at_rendered(&rendered).is_some() {
+        if chips.span_at_rendered(&rendered).is_some() || chips.icon_at_rendered(&rendered) {
             return None;
         }
         let start = chips.to_model(rendered.start);

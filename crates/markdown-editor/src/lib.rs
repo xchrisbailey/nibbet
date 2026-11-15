@@ -75,6 +75,8 @@ mod language_menu;
 mod link_picker;
 mod markdown_source;
 mod marks;
+// FORK: how the host shows images and links.
+mod host_display;
 // FORK: Links drawn as title chips.
 mod wiki_chip;
 mod wiki_link;
@@ -141,6 +143,7 @@ pub use selection::{BlockSelection, SelectionError};
 pub use transaction::{EditOrigin, Transaction};
 
 pub use host::{CapturedRange, CapturedRangeError, SourceSnapshot};
+pub use host_display::{ImageDisplay, ImageDisplayFn, LinkDecoration, LinkDecorationFn};
 
 /// Whether image atoms may load resources while the editor presents them.
 /// `Placeholder` keeps the atomic document, source and selection but never

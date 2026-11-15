@@ -1,5 +1,8 @@
 //! `BlockEditorState`: the entity around [`BlockEditorModel`] (design §6).
 
+use super::host_display::{
+    AttachmentIconPlugin, ImageDisplayFn, ImagePlaceholderPlugin, LinkDecorationFn,
+};
 use super::input_rule::RuleKind;
 use std::sync::Arc;
 use std::{cell::RefCell, ops::Range, rc::Rc};
@@ -535,6 +538,10 @@ pub struct BlockEditorState {
     /// `callout_menu.rs`.
     pub(crate) readonly: bool,
     image_policy: super::ImagePolicy,
+    /// FORK: the host's say on how each image shows.
+    pub(crate) image_display: Option<Arc<ImageDisplayFn>>,
+    /// FORK: the host's say on how each link is decorated.
+    link_decoration: Option<Arc<LinkDecorationFn>>,
     submit_policy: SubmitPolicy,
     clipboard_policy: ClipboardPolicy,
     paste_sequence: u64,
@@ -605,10 +612,13 @@ impl BlockEditorState {
         // FORK: the Link chip plugin reads the directory through this handle.
         let wiki_links = DirectoryHandle::default();
         let wiki_hover = HoverHandle::default();
-        let extensions = MarkdownExtensions::default().plugin(WikiChipPlugin {
-            directory: wiki_links.clone(),
-            hover: wiki_hover.clone(),
-        });
+        let extensions = MarkdownExtensions::default()
+            .plugin(WikiChipPlugin {
+                directory: wiki_links.clone(),
+                hover: wiki_hover.clone(),
+            })
+            .plugin(ImagePlaceholderPlugin)
+            .plugin(AttachmentIconPlugin);
         let model = BlockEditorModel::from_markdown("", extensions)
             .unwrap_or_else(|_| unreachable!("empty source always parses"));
         Self {
@@ -633,6 +643,8 @@ impl BlockEditorState {
             readonly: false,
             toolbar_hidden: false,
             image_policy: super::ImagePolicy::default(),
+            image_display: None,
+            link_decoration: None,
             submit_policy: SubmitPolicy::default(),
             clipboard_policy: ClipboardPolicy::default(),
             paste_sequence: 0,
@@ -874,6 +886,40 @@ impl BlockEditorState {
     }
     pub fn image_policy(&self) -> super::ImagePolicy {
         self.image_policy
+    }
+
+    /// FORK: lets the host decide how each image shows, from its raw
+    /// destination: load it from a source it picks, or draw a placeholder
+    /// chip. The Markdown is the same either way. Without it, images load as
+    /// before (`ImagePolicy` still applies).
+    ///
+    /// The callback runs when a leaf holding the image is projected and, for a
+    /// loaded image, on every frame, so it must be cheap: no disk access.
+    /// When its answers change (a file appeared), call this again. `data:`
+    /// images never reach it; the editor always decodes those itself.
+    pub fn set_image_display(&mut self, display: Arc<ImageDisplayFn>, cx: &mut Context<Self>) {
+        self.image_display = Some(display);
+        self.sync_host_display(cx);
+    }
+
+    /// FORK: lets the host decorate links from their raw destination: a
+    /// paperclip before an Attachment, or a muted, struck-through link for a
+    /// missing one. The Markdown is the same either way. The callback runs
+    /// when a leaf holding the link is projected; call this again when its
+    /// answers change.
+    pub fn set_link_decoration(
+        &mut self,
+        decoration: Arc<LinkDecorationFn>,
+        cx: &mut Context<Self>,
+    ) {
+        self.link_decoration = Some(decoration);
+        self.sync_host_display(cx);
+    }
+
+    fn sync_host_display(&mut self, cx: &mut Context<Self>) {
+        self.projection
+            .set_host_display(self.image_display.clone(), self.link_decoration.clone());
+        cx.notify();
     }
 
     pub fn caret_prefix_snapshot(&self) -> Option<SharedString> {
