@@ -56,6 +56,10 @@ _Avoid_: Reference, mention, backlink
 The list of Items that opens when the user types `[[` in an Item's body. Choosing one inserts a Link to it.
 _Avoid_: Mention, autocomplete, quick switcher
 
+**Attachment**:
+A file, such as an image or a PDF, that belongs to one Item and is linked from its body. Images show inline; other files show as a link that opens them.
+_Avoid_: Asset, upload, media, embed
+
 **Callout**:
 A highlighted box in an Item's body that marks its content as a note, tip, important point, warning or caution.
 _Avoid_: Alert, admonition, surface
