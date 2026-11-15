@@ -138,12 +138,12 @@ fn copy_one(
     let destination = markdown_editor::markdown_destination(&attached.destination);
     Ok(if attached.inline {
         FileLink {
-            markdown: format!("![{}]({destination})", escape(&alt)),
+            markdown: format!("![{}]({destination})", escape(&alt)), // md-escaped
             image: true,
         }
     } else {
         FileLink {
-            markdown: format!("[{}]({destination})", escape(&link_text)),
+            markdown: format!("[{}]({destination})", escape(&link_text)), // md-escaped
             image: false,
         }
     })

@@ -21,6 +21,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: scripts/check-fork-markers
+      - run: scripts/check-markdown-writes
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       # The forked editor's view tests sit behind a feature; see docs/agents/gpui-kit-notes.md.
