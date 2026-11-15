@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::links::{InboundLink, ItemId, Link, LinkGraph, LinkTarget};
-use crate::{AttachmentItem, Date, JournalEntry, Note, Project, Space, Store, Task};
+use crate::{AttachmentOwner, Date, JournalEntry, Note, Project, Space, Store, Task};
 
 /// Something in a Space that may have changed on disk. Applying a `Change`
 /// re-reads that thing, so the same `Change` covers create, edit and delete.
@@ -27,7 +27,7 @@ pub enum Change {
     /// is `None`). Nothing in the index depends on it; the app drops the
     /// cached image.
     Attachment {
-        item: AttachmentItem,
+        item: AttachmentOwner,
         file: Option<String>,
     },
     /// The `templates/` folder itself moved or vanished: reload the list.

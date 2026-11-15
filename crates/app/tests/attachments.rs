@@ -16,7 +16,7 @@ use gpui_kit::{
     TestAppContext, Window,
 };
 use sett::{AppModel, AttachmentOpener, Selection};
-use sett_store::{AttachmentItem, Change};
+use sett_store::{AttachmentOwner, Change};
 
 fn open_plan(cx: &mut TestAppContext, body: &str) -> Fixture {
     let f = open_shell(cx);
@@ -187,7 +187,7 @@ fn a_file_added_outside_sett_replaces_the_missing_chip(cx: &mut TestAppContext) 
     fs::write(f.data_root.join("personal/notes/plan/late.png"), png).unwrap();
     let model = f.model(cx);
     let change = Change::Attachment {
-        item: AttachmentItem::Note {
+        item: AttachmentOwner::Note {
             project: None,
             slug: "plan".into(),
         },

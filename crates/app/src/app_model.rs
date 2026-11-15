@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
 use sett_store::{
-    AttachmentItem, Board, Change, Date, EditorMode, INBOX_SLUG, ItemId, JournalEntry, Note,
+    AttachmentOwner, Board, Change, Date, EditorMode, INBOX_SLUG, ItemId, JournalEntry, Note,
     Project, Settings, Space, SpaceIndex, Store, Template, Update, Watcher,
 };
 
@@ -36,7 +36,7 @@ pub enum AppModelEvent {
     OpenTemplate(String),
     /// Something in this Item's Attachment folder changed outside sett, so
     /// what the body showed of it may be stale.
-    AttachmentChanged(AttachmentItem),
+    AttachmentChanged(AttachmentOwner),
 }
 
 /// The open data root and the active Space: its index, kept current by a

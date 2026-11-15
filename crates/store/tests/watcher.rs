@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use async_channel::Receiver;
-use sett_store::{AttachmentItem, Change, Date, JournalEntry, Space, Store};
+use sett_store::{AttachmentOwner, Change, Date, JournalEntry, Space, Store};
 
 /// FSEvents latency varies, so wait up to a bound rather than a fixed sleep.
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -238,17 +238,17 @@ fn files_in_an_items_attachment_folder_are_reported() {
         &rx,
         &[
             attachment(
-                AttachmentItem::Task {
+                AttachmentOwner::Task {
                     project: "inbox".into(),
                     slug: "fix-login".into(),
                 },
                 "shot.png",
             ),
             attachment(
-                AttachmentItem::Journal(Date::parse("2026-11-14").unwrap()),
+                AttachmentOwner::Journal(Date::parse("2026-11-14").unwrap()),
                 "a.pdf",
             ),
-            attachment(AttachmentItem::Template("bug".into()), "b.png"),
+            attachment(AttachmentOwner::Template("bug".into()), "b.png"),
         ],
     );
     assert!(!seen.iter().any(|c| matches!(

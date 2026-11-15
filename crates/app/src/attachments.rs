@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use gpui_kit::{ImageSource, Resource};
 use markdown_editor::{ImageDisplay, LinkDecoration};
-use sett_store::{AttachmentItem, Resolved, Space, Store, is_inline_image};
+use sett_store::{AttachmentOwner, Resolved, Space, Store, is_inline_image};
 
 /// Answers for one open Item. The editor's callbacks run on every frame, so
 /// each destination is resolved against the disk once and remembered; a
@@ -16,7 +16,7 @@ use sett_store::{AttachmentItem, Resolved, Space, Store, is_inline_image};
 pub(crate) struct Attachments {
     store: Store,
     space: Space,
-    item: AttachmentItem,
+    item: AttachmentOwner,
     resolved: Mutex<HashMap<String, Resolved>>,
 }
 
@@ -32,7 +32,7 @@ pub(crate) enum Open {
 }
 
 impl Attachments {
-    pub(crate) fn new(store: Store, space: Space, item: AttachmentItem) -> Attachments {
+    pub(crate) fn new(store: Store, space: Space, item: AttachmentOwner) -> Attachments {
         Attachments {
             store,
             space,
@@ -41,7 +41,7 @@ impl Attachments {
         }
     }
 
-    pub(crate) fn item(&self) -> &AttachmentItem {
+    pub(crate) fn item(&self) -> &AttachmentOwner {
         &self.item
     }
 
@@ -156,7 +156,7 @@ mod tests {
         fs::create_dir_all(notes.join("plan")).unwrap();
         fs::write(notes.join("plan/shot.png"), b"x").unwrap();
         fs::write(notes.join("plan/report.pdf"), b"x").unwrap();
-        let item = AttachmentItem::Note {
+        let item = AttachmentOwner::Note {
             project: None,
             slug: "plan".into(),
         };

@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use serde_yaml_ng::{Mapping, Value};
 
-pub use attachment::{Attached, AttachmentItem, Resolved, is_inline_image};
+pub use attachment::{Attached, AttachmentOwner, Resolved, is_inline_image};
 pub use board::{Board, BoardColumn, MIN_COLUMNS};
 pub use callout::{CalloutKind, TaskCallout};
 pub use date::Date;

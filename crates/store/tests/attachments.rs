@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use sett_store::{AttachmentItem, Date, Resolved, Space, Store, is_inline_image};
+use sett_store::{AttachmentOwner, Date, Resolved, Space, Store, is_inline_image};
 
 const SPACE: Space = Space::Work;
 
@@ -28,8 +28,8 @@ fn source(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
     path
 }
 
-fn note(slug: &str) -> AttachmentItem {
-    AttachmentItem::Note {
+fn note(slug: &str) -> AttachmentOwner {
+    AttachmentOwner::Note {
         project: None,
         slug: slug.into(),
     }
@@ -147,7 +147,7 @@ fn directories_and_missing_files_are_refused() {
 #[test]
 fn a_journal_entry_with_no_file_yet_still_gets_its_folder() {
     let (_dir, store, _) = new_store();
-    let item = AttachmentItem::Journal(Date::parse("2026-11-14").unwrap());
+    let item = AttachmentOwner::Journal(Date::parse("2026-11-14").unwrap());
 
     let attached = store.attach_bytes(SPACE, &item, "PNG", b"pixels").unwrap();
 
@@ -168,15 +168,15 @@ fn a_journal_entry_with_no_file_yet_still_gets_its_folder() {
 fn folders_sit_beside_each_kind_of_item() {
     let (_dir, store, _) = new_store();
     let root = store.root().join("work");
-    let task = AttachmentItem::Task {
+    let task = AttachmentOwner::Task {
         project: "inbox".into(),
         slug: "fix-login".into(),
     };
-    let in_project = AttachmentItem::Note {
+    let in_project = AttachmentOwner::Note {
         project: Some("inbox".into()),
         slug: "n".into(),
     };
-    let template = AttachmentItem::Template("bug".into());
+    let template = AttachmentOwner::Template("bug".into());
     assert_eq!(
         store.attachment_dir(SPACE, &task).unwrap(),
         root.join("projects/inbox/tasks/fix-login")
@@ -260,7 +260,7 @@ fn heic_becomes_a_jpeg_and_a_failed_conversion_keeps_the_original() {
     );
 }
 
-fn resolve(store: &Store, item: &AttachmentItem, destination: &str) -> Resolved {
+fn resolve(store: &Store, item: &AttachmentOwner, destination: &str) -> Resolved {
     store.resolve_attachment(SPACE, item, destination)
 }
 
@@ -332,10 +332,10 @@ fn trashing_an_item_takes_its_folder_too() {
     store.save_journal_entry(&mut entry).unwrap();
 
     for item in [
-        AttachmentItem::from(&task),
-        AttachmentItem::from(&in_note),
-        AttachmentItem::from(&template),
-        AttachmentItem::from(&entry),
+        AttachmentOwner::from(&task),
+        AttachmentOwner::from(&in_note),
+        AttachmentOwner::from(&template),
+        AttachmentOwner::from(&entry),
     ] {
         store.attach_bytes(SPACE, &item, "png", b"x").unwrap();
     }
@@ -345,10 +345,10 @@ fn trashing_an_item_takes_its_folder_too() {
     store.trash_journal_entry(&entry).unwrap();
 
     for item in [
-        AttachmentItem::from(&task),
-        AttachmentItem::from(&in_note),
-        AttachmentItem::from(&template),
-        AttachmentItem::from(&entry),
+        AttachmentOwner::from(&task),
+        AttachmentOwner::from(&in_note),
+        AttachmentOwner::from(&template),
+        AttachmentOwner::from(&entry),
     ] {
         assert!(!store.attachment_dir(SPACE, &item).unwrap().exists());
     }

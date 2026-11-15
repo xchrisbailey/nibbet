@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use notify::{RecursiveMode, Watcher as _};
 
-use crate::{AttachmentItem, Change, Date, Space};
+use crate::{AttachmentOwner, Change, Date, Space};
 
 /// How long to gather raw events before reporting, so one save that fires
 /// several events reaches the caller once. Well under the 1 s target.
@@ -202,7 +202,7 @@ fn classify(rel: &Path) -> Option<Change> {
         ["templates", f, rest @ ..] => match md_stem(f) {
             Some(stem) if rest.is_empty() => Some(Change::Template(stem.to_string())),
             Some(_) => None,
-            None => attachment(AttachmentItem::Template(f.to_string()), f, rest),
+            None => attachment(AttachmentOwner::Template(f.to_string()), f, rest),
         },
         ["projects", p, rest @ ..] if visible(p) => {
             let project = p.to_string();
@@ -215,7 +215,7 @@ fn classify(rel: &Path) -> Option<Change> {
                     }),
                     Some(_) => None,
                     None => attachment(
-                        AttachmentItem::Task {
+                        AttachmentOwner::Task {
                             project,
                             slug: f.to_string(),
                         },
@@ -230,7 +230,7 @@ fn classify(rel: &Path) -> Option<Change> {
                     }),
                     Some(_) => None,
                     None => attachment(
-                        AttachmentItem::Note {
+                        AttachmentOwner::Note {
                             project: Some(project),
                             slug: f.to_string(),
                         },
@@ -248,7 +248,7 @@ fn classify(rel: &Path) -> Option<Change> {
             }),
             Some(_) => None,
             None => attachment(
-                AttachmentItem::Note {
+                AttachmentOwner::Note {
                     project: None,
                     slug: f.to_string(),
                 },
@@ -259,14 +259,14 @@ fn classify(rel: &Path) -> Option<Change> {
         ["journal", f, rest @ ..] => match f.strip_suffix(".md") {
             Some(stem) if rest.is_empty() => Some(Change::Journal(Date::parse(stem)?)),
             Some(_) => None,
-            None => attachment(AttachmentItem::Journal(Date::parse(f)?), f, rest),
+            None => attachment(AttachmentOwner::Journal(Date::parse(f)?), f, rest),
         },
         _ => None,
     }
 }
 
 /// The Attachment change for `folder` (the Item's slug) and the path below it.
-fn attachment(item: AttachmentItem, folder: &str, rest: &[&str]) -> Option<Change> {
+fn attachment(item: AttachmentOwner, folder: &str, rest: &[&str]) -> Option<Change> {
     if !visible(folder) || !rest.iter().all(|part| visible(part)) {
         return None;
     }

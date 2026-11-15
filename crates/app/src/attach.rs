@@ -8,7 +8,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{ClipboardEntry, ClipboardItem};
-use sett_store::{AttachmentItem, Resolved, Space, Store};
+use sett_store::{AttachmentOwner, Resolved, Space, Store};
 
 /// Something to attach.
 #[derive(Debug, Clone)]
@@ -89,7 +89,7 @@ pub(crate) struct Attached {
 pub(crate) fn copy(
     store: &Store,
     space: Space,
-    item: &AttachmentItem,
+    item: &AttachmentOwner,
     sources: Vec<Source>,
 ) -> Attached {
     let mut out = Attached::default();
@@ -106,7 +106,7 @@ pub(crate) fn copy(
 fn copy_one(
     store: &Store,
     space: Space,
-    item: &AttachmentItem,
+    item: &AttachmentOwner,
     source: &Source,
 ) -> io::Result<Piece> {
     let (attached, link_text, alt) = match source {
@@ -233,8 +233,8 @@ impl Carried {
 /// file that can't be copied also stays as written, and is reported.
 pub(crate) fn carry(
     store: &Store,
-    from: (Space, &AttachmentItem),
-    to: (Space, &AttachmentItem),
+    from: (Space, &AttachmentOwner),
+    to: (Space, &AttachmentOwner),
     markdown: &str,
 ) -> Carried {
     let mut failed = Vec::new();
@@ -310,7 +310,7 @@ mod tests {
     fn links_to_files_already_in_the_folder_are_escaped_at_any_depth() {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path()).unwrap();
-        let item = AttachmentItem::Note {
+        let item = AttachmentOwner::Note {
             project: None,
             slug: "plan".into(),
         };

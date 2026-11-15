@@ -19,7 +19,7 @@ use markdown_editor::{
     PasteRequest,
 };
 use sett_store::{
-    AttachmentItem, Date, EditorMode, JournalEntry, LinkTarget, Note, Space, Template,
+    AttachmentOwner, Date, EditorMode, JournalEntry, LinkTarget, Note, Space, Template,
 };
 
 use crate::app_model::{AppModel, AppModelEvent};
@@ -36,7 +36,7 @@ use crate::template_options::{ATTACHMENT, TEMPLATE_PREFIX};
 struct CopiedFrom {
     text: String,
     space: Space,
-    item: AttachmentItem,
+    item: AttachmentOwner,
 }
 
 impl gpui_kit::Global for CopiedFrom {}
@@ -134,18 +134,18 @@ impl EditorTarget {
         }
     }
 
-    fn attachment_item(&self) -> AttachmentItem {
+    fn attachment_item(&self) -> AttachmentOwner {
         match self {
-            EditorTarget::Item(ItemRef::Note { project, slug, .. }) => AttachmentItem::Note {
+            EditorTarget::Item(ItemRef::Note { project, slug, .. }) => AttachmentOwner::Note {
                 project: project.clone(),
                 slug: slug.clone(),
             },
-            EditorTarget::Item(ItemRef::Journal { date, .. }) => AttachmentItem::Journal(*date),
-            EditorTarget::Item(ItemRef::Task { project, slug, .. }) => AttachmentItem::Task {
+            EditorTarget::Item(ItemRef::Journal { date, .. }) => AttachmentOwner::Journal(*date),
+            EditorTarget::Item(ItemRef::Task { project, slug, .. }) => AttachmentOwner::Task {
                 project: project.clone(),
                 slug: slug.clone(),
             },
-            EditorTarget::Template { slug, .. } => AttachmentItem::Template(slug.clone()),
+            EditorTarget::Template { slug, .. } => AttachmentOwner::Template(slug.clone()),
         }
     }
 
@@ -872,7 +872,7 @@ impl ItemEditor {
         }
         let store = self.model.read(cx).store();
         let (to_space, to_item) = (target.space(), target.attachment_item());
-        let from = AttachmentItem::from(&template);
+        let from = AttachmentOwner::from(&template);
         cx.spawn_in(window, async move |this, cx| {
             let carried = cx
                 .background_spawn(async move {

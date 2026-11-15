@@ -9,10 +9,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::{Date, JournalEntry, Note, Space, Store, Task, Template, check_slug, invalid, slug};
 
-/// The Items that can own Attachments. Names the Item within a Space, so the
+/// What can own Attachments: an Item or a Template. Names it within a Space, so the
 /// Store methods take the `Space` beside it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AttachmentItem {
+pub enum AttachmentOwner {
     Task {
         project: String,
         slug: String,
@@ -26,43 +26,43 @@ pub enum AttachmentItem {
     Template(String),
 }
 
-impl AttachmentItem {
+impl AttachmentOwner {
     fn slug(&self) -> String {
         match self {
-            AttachmentItem::Task { slug, .. } | AttachmentItem::Note { slug, .. } => slug.clone(),
-            AttachmentItem::Journal(date) => date.to_string(),
-            AttachmentItem::Template(slug) => slug.clone(),
+            AttachmentOwner::Task { slug, .. } | AttachmentOwner::Note { slug, .. } => slug.clone(),
+            AttachmentOwner::Journal(date) => date.to_string(),
+            AttachmentOwner::Template(slug) => slug.clone(),
         }
     }
 }
 
-impl From<&Task> for AttachmentItem {
+impl From<&Task> for AttachmentOwner {
     fn from(task: &Task) -> Self {
-        AttachmentItem::Task {
+        AttachmentOwner::Task {
             project: task.project.clone(),
             slug: task.slug.clone(),
         }
     }
 }
 
-impl From<&Note> for AttachmentItem {
+impl From<&Note> for AttachmentOwner {
     fn from(note: &Note) -> Self {
-        AttachmentItem::Note {
+        AttachmentOwner::Note {
             project: note.project.clone(),
             slug: note.slug.clone(),
         }
     }
 }
 
-impl From<&JournalEntry> for AttachmentItem {
+impl From<&JournalEntry> for AttachmentOwner {
     fn from(entry: &JournalEntry) -> Self {
-        AttachmentItem::Journal(entry.date)
+        AttachmentOwner::Journal(entry.date)
     }
 }
 
-impl From<&Template> for AttachmentItem {
+impl From<&Template> for AttachmentOwner {
     fn from(template: &Template) -> Self {
-        AttachmentItem::Template(template.slug.clone())
+        AttachmentOwner::Template(template.slug.clone())
     }
 }
 
@@ -101,27 +101,27 @@ pub fn is_inline_image(ext: &str) -> bool {
 impl Store {
     /// The folder holding `item`'s Attachments. It may not exist yet: it is
     /// created with the first Attachment.
-    pub fn attachment_dir(&self, space: Space, item: &AttachmentItem) -> io::Result<PathBuf> {
+    pub fn attachment_dir(&self, space: Space, item: &AttachmentOwner) -> io::Result<PathBuf> {
         let slug = item.slug();
         check_slug(&slug)?;
         Ok(self.item_dir(space, item)?.join(slug))
     }
 
     /// The directory holding the Item's own file.
-    fn item_dir(&self, space: Space, item: &AttachmentItem) -> io::Result<PathBuf> {
+    fn item_dir(&self, space: Space, item: &AttachmentOwner) -> io::Result<PathBuf> {
         match item {
-            AttachmentItem::Task { project, .. } => {
+            AttachmentOwner::Task { project, .. } => {
                 check_slug(project)?;
                 Ok(self.project_dir(space, project).join("tasks"))
             }
-            AttachmentItem::Note { project, .. } => {
+            AttachmentOwner::Note { project, .. } => {
                 if let Some(p) = project {
                     check_slug(p)?;
                 }
                 Ok(self.notes_dir(space, project.as_deref()))
             }
-            AttachmentItem::Journal(_) => Ok(self.journal_dir(space)),
-            AttachmentItem::Template(_) => Ok(self.templates_dir(space)),
+            AttachmentOwner::Journal(_) => Ok(self.journal_dir(space)),
+            AttachmentOwner::Template(_) => Ok(self.templates_dir(space)),
         }
     }
 
@@ -130,7 +130,7 @@ impl Store {
     pub fn attach_file(
         &self,
         space: Space,
-        item: &AttachmentItem,
+        item: &AttachmentOwner,
         source: &Path,
     ) -> io::Result<Attached> {
         if source.is_dir() {
@@ -175,7 +175,7 @@ impl Store {
     pub fn attach_bytes(
         &self,
         space: Space,
-        item: &AttachmentItem,
+        item: &AttachmentOwner,
         ext: &str,
         bytes: &[u8],
     ) -> io::Result<Attached> {
@@ -250,7 +250,7 @@ impl Store {
     pub fn resolve_attachment(
         &self,
         space: Space,
-        item: &AttachmentItem,
+        item: &AttachmentOwner,
         destination: &str,
     ) -> Resolved {
         let Ok(dir) = self.item_dir(space, item) else {
@@ -290,7 +290,7 @@ impl Store {
 
     /// Trashes the Item's Attachment folder, if it has one. Called after the
     /// Item's file went; a failure here doesn't bring the file back.
-    pub(crate) fn trash_attachments(&self, space: Space, item: &AttachmentItem) -> io::Result<()> {
+    pub(crate) fn trash_attachments(&self, space: Space, item: &AttachmentOwner) -> io::Result<()> {
         let folder = self.attachment_dir(space, item)?;
         if folder.is_dir() {
             self.trash(&folder)?;
