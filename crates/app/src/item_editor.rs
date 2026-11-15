@@ -752,12 +752,17 @@ impl ItemEditor {
         .detach();
     }
 
-    /// Files dropped on the body go in at the pointer's caret (the block
-    /// view) or the raw cursor.
-    fn dropped(&mut self, paths: &ExternalPaths, window: &mut Window, cx: &mut Context<Self>) {
-        if self.mode == EditorMode::Block {
-            self.move_caret_to(window.mouse_position(), window, cx);
-        }
+    /// Files dropped on the body go in at `at`: the caret under the pointer
+    /// in the block view, the end of the body below the last block, or the
+    /// raw cursor.
+    fn dropped(
+        &mut self,
+        paths: &ExternalPaths,
+        at: DropAt,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.drop_caret(at, window.mouse_position(), window, cx);
         let sources = paths.paths().iter().cloned().map(Source::Path).collect();
         self.attach(sources, None, None, window, cx);
     }
@@ -766,11 +771,33 @@ impl ItemEditor {
     fn drag_caret(
         &mut self,
         event: &DragMoveEvent<ExternalPaths>,
+        at: DropAt,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.mode == EditorMode::Block && event.bounds.contains(&event.event.position) {
-            self.move_caret_to(event.event.position, window, cx);
+        if event.bounds.contains(&event.event.position) {
+            self.drop_caret(at, event.event.position, window, cx);
+        }
+    }
+
+    fn drop_caret(
+        &mut self,
+        at: DropAt,
+        pointer: gpui_kit::Point<gpui_kit::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.mode != EditorMode::Block {
+            return;
+        }
+        match at {
+            DropAt::Pointer => self.move_caret_to(pointer, window, cx),
+            DropAt::End => self.block.update(cx, |block, cx| {
+                block.focus(window, cx);
+                // Only fails for an empty document, where the caret is
+                // already at the end.
+                block.select_end(cx).ok();
+            }),
         }
     }
 
@@ -1052,11 +1079,7 @@ impl ItemEditor {
             .min_h_0()
             .drag_over::<ExternalPaths>(|style, _, _, cx| {
                 style.bg(cx.theme().drag_border.opacity(0.08))
-            })
-            .on_drag_move::<ExternalPaths>(cx.listener(Self::drag_caret))
-            .on_drop::<ExternalPaths>(cx.listener(|this, paths: &ExternalPaths, window, cx| {
-                this.dropped(paths, window, cx)
-            }));
+            });
         let this = cx.entity().downgrade();
         match self.mode {
             // The editor is only as tall as its text (the fork styles an inner
@@ -1067,19 +1090,32 @@ impl ItemEditor {
                 .overflow_y_scroll()
                 .track_scroll(&self.scroll)
                 .child(
-                    image_cache(self.images.clone())
-                        .child(BlockEditor::new(&self.block).px_8().pt_4()),
+                    // Drops on the text go at the caret under the pointer.
+                    drop_target(DropAt::Pointer, cx).child(
+                        image_cache(self.images.clone())
+                            .child(BlockEditor::new(&self.block).px_8().pt_4()),
+                    ),
                 )
-                .child(div().flex_grow(1.).min_h_16().cursor_text().on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|this, _, window, cx| {
-                        this.focus_end(window, cx);
-                        // Otherwise the shell takes focus back.
-                        window.prevent_default();
-                    }),
-                ))
+                .child(
+                    // Below the last block, a drop goes at the end.
+                    drop_target(DropAt::End, cx)
+                        .flex_grow(1.)
+                        .min_h_16()
+                        .cursor_text()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, window, cx| {
+                                this.focus_end(window, cx);
+                                // Otherwise the shell takes focus back.
+                                window.prevent_default();
+                            }),
+                        ),
+                )
                 .into_any_element(),
             EditorMode::Raw => body
+                .on_drop::<ExternalPaths>(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+                    this.dropped(paths, DropAt::Pointer, window, cx)
+                }))
                 .flex()
                 .flex_col()
                 .px_6()
@@ -1101,6 +1137,31 @@ impl ItemEditor {
                 .into_any_element(),
         }
     }
+}
+
+/// Where in the block view a drop of files goes.
+#[derive(Clone, Copy)]
+enum DropAt {
+    /// The caret nearest the pointer.
+    Pointer,
+    /// The end of the body.
+    End,
+}
+
+/// A region of the block view that takes dropped files: the caret follows the
+/// pointer over it, and the drop goes in `at`.
+fn drop_target(at: DropAt, cx: &mut Context<ItemEditor>) -> gpui_kit::Div {
+    div()
+        .on_drag_move::<ExternalPaths>(cx.listener(
+            move |this, event: &DragMoveEvent<ExternalPaths>, window, cx| {
+                this.drag_caret(event, at, window, cx)
+            },
+        ))
+        .on_drop::<ExternalPaths>(cx.listener(move |this, paths: &ExternalPaths, window, cx| {
+            this.dropped(paths, at, window, cx);
+            // Otherwise the other region would take it too.
+            cx.stop_propagation();
+        }))
 }
 
 /// A long local date such as "Monday, 9 November 2026".

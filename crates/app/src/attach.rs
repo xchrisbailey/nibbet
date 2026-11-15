@@ -227,3 +227,41 @@ fn blank_lines_needed(mut near: impl Iterator<Item = char>) -> &'static str {
         _ => "",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_notice_names_every_failure() {
+        let attached = Attached {
+            pieces: Vec::new(),
+            failed: vec![
+                ("a folder".into(), io::Error::other("It\u{2019}s a folder")),
+                ("report.pdf".into(), io::Error::other("disk full")),
+            ],
+        };
+        assert_eq!(
+            attached.notice().as_deref(),
+            Some("Couldn\u{2019}t attach a folder, report.pdf. It\u{2019}s a folder.")
+        );
+    }
+
+    #[test]
+    fn raw_images_get_blank_lines_only_where_text_is_adjacent() {
+        let md = "![a](a.png)";
+        assert_eq!(raw_insertion("", 0, md, true), md);
+        assert_eq!(
+            raw_insertion("one\n\ntwo", 5, md, true),
+            md.to_string() + "\n\n"
+        );
+        assert_eq!(raw_insertion("one\ntwo", 3, md, true), "\n\n![a](a.png)\n");
+        assert_eq!(raw_insertion("one two", 3, md, true), "\n\n![a](a.png)\n\n");
+        assert_eq!(raw_insertion("one two", 3, "[f](f)", false), "[f](f)");
+    }
+
+    #[test]
+    fn link_text_escapes_brackets() {
+        assert_eq!(escape("a [1] b\\c"), "a \\[1\\] b\\\\c");
+    }
+}
