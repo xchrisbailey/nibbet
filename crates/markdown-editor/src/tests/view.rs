@@ -2965,12 +2965,14 @@ fn d18_pasting_blocks_mid_paragraph_splits_it(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-#[ignore = "fails on main: https://github.com/xchrisbailey/sett/issues/98"]
 fn d18_paste_into_an_empty_paragraph_inserts_blocks_without_a_stray_one(cx: &mut TestAppContext) {
-    let (editor, cx) = open(cx, "# H\n\n- item\n\n");
+    // Trailing blank lines parse to nothing, so build the empty paragraph
+    // from a real one; otherwise the caret lands at the end of "item" and
+    // the paste rightly nests inside the list item.
+    let (editor, cx) = open(cx, "# H\n\n- item\n\nT");
     select_in(&editor, cx, (0, 0), (1, 4));
     keys(cx, "M-c");
-    keys(cx, "M-end");
+    empty_last_paragraph(&editor, cx);
     keys(cx, "M-v");
     assert_eq!(
         source(&editor, cx).trim_end(),
