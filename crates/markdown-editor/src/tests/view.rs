@@ -1901,6 +1901,26 @@ fn d14_hover_and_secondary_click_on_link(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn secondary_click_on_an_image_emits_link_clicked_with_its_destination(cx: &mut TestAppContext) {
+    let (editor, cx) = open(cx, "a![pic](dir/x.png)b");
+    let log = event_log(&editor, cx);
+    let on = first_line_point(&editor, cx, 0, px(12.));
+    let urls = || -> Vec<gpui::SharedString> {
+        log.borrow()
+            .iter()
+            .filter_map(|e| match e {
+                crate::BlockEditorEvent::LinkClicked { url } => Some(url.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    cx.simulate_click(on, Modifiers::none());
+    assert!(urls().is_empty());
+    cx.simulate_click(on, secondary_modifier());
+    assert_eq!(urls(), vec![gpui::SharedString::from("dir/x.png")]);
+}
+
+#[gpui::test]
 fn d14_cmd_k_requests_popover_and_set_link_edits(cx: &mut TestAppContext) {
     let (editor, cx) = open(cx, "hello world");
     let log = event_log(&editor, cx);

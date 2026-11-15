@@ -1941,8 +1941,14 @@ impl BlockEditorState {
     /// Cmd/Ctrl+click: emit [`BlockEditorEvent::LinkClicked`] for the link
     /// under `at`. Returns whether there was one.
     pub(crate) fn follow_link_at(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) -> bool {
-        match self.link_at(at) {
-            Some((_, _, url)) => {
+        // FORK: an image follows too, with its destination, unless it sits
+        // inside a link, whose mark wins.
+        match self
+            .link_at(at)
+            .map(|(_, _, url)| url)
+            .or_else(|| self.image_url_at(at))
+        {
+            Some(url) => {
                 cx.emit(BlockEditorEvent::LinkClicked { url });
                 true
             }
@@ -2018,15 +2024,33 @@ impl BlockEditorState {
         }
     }
 
+    /// FORK: the destination of the image atom drawn under `at`.
+    fn image_url_at(&self, at: Point<Pixels>) -> Option<SharedString> {
+        let (block, range) = {
+            let frame = self.frame.borrow();
+            let pos = frame.hit_test(at)?;
+            let leaf = frame.leaf(pos.block)?;
+            if !leaf.bounds().contains(&at) {
+                return None;
+            }
+            (pos.block, leaf.atom_at(at)?)
+        };
+        self.image_url_in(block, &range)
+    }
+
     /// FORK: the url of the first image inside the selection.
     fn selected_image_url(&self) -> Option<SharedString> {
         let (block, range) = self.selected_images().into_iter().next()?;
+        self.image_url_in(block, &range)
+    }
+
+    fn image_url_in(&self, block: BlockId, range: &Range<usize>) -> Option<SharedString> {
         self.model
             .doc
             .inline(block)?
             .pieces()
             .find_map(|(piece, _, atom)| match atom {
-                Some(super::inline::InlineAtom::Image(image)) if piece == range => {
+                Some(super::inline::InlineAtom::Image(image)) if piece == *range => {
                     Some(image.url.to_string().into())
                 }
                 _ => None,
