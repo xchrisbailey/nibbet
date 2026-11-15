@@ -110,6 +110,8 @@ pub use element::BlockEditor;
 pub use gpui_kit::base::text::editor_host::ColumnAlign;
 pub use input_rule::InputRule;
 pub use insert_menu::InsertMenuOption;
+// FORK
+pub use markdown_source::map_destinations;
 // FORK: the language lookup and the Language Menu's list.
 pub use language::{CODE_BLOCK_LANGUAGES, display_name, highlights};
 pub use link_picker::LinkCandidate;
