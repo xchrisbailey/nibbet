@@ -183,11 +183,15 @@ fn render_row(section: &str, row: Row, model: &Entity<AppModel>, cx: &App) -> An
             } else {
                 kind.to_string()
             };
+            // Capped at the panel's width, with both texts truncating, so a
+            // long title or Project name in a narrow editor ends in an
+            // ellipsis instead of running off the window (#49).
             let button = Button::new(id)
                 .ghost()
                 .small()
+                .max_w_full()
                 .label(title)
-                .child(div().text_color(muted).child(detail))
+                .child(div().min_w_0().truncate().text_color(muted).child(detail))
                 .on_click(move |_, _, cx| {
                     model.update(cx, |w, cx| w.open_item(item.clone(), cx));
                 });
