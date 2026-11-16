@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues live in GitHub Issues on xchrisbailey/sett (via `gh`). See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues on xchrisbailey/nibbet (via `gh`). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
