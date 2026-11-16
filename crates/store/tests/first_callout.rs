@@ -1,4 +1,4 @@
-use sett_store::{CalloutKind, Date, Space, Store, TaskCallout};
+use nibbet_store::{CalloutKind, Date, Space, Store, TaskCallout};
 
 use CalloutKind::{Caution, Important, Note, Tip, Warning};
 
@@ -7,7 +7,7 @@ type Row = (&'static str, Option<(CalloutKind, &'static [&'static str])>);
 
 fn first(body: &str) -> Option<TaskCallout> {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path().join("sett")).unwrap();
+    let store = Store::open(dir.path().join("nibbet")).unwrap();
     let mut task = store
         .create_task(
             Space::Work,

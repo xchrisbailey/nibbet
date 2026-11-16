@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use crate::attach::file_name;
 use gpui_kit::{App, ImageSource, Resource};
 use markdown_editor::{ImageDisplay, LinkDecoration};
-use sett_store::{AttachmentOwner, Resolved, Space, Store, is_inline_image};
+use nibbet_store::{AttachmentOwner, Resolved, Space, Store, is_inline_image};
 
 /// How a Cmd-clicked Attachment reaches the system's default app. Tests set
 /// one to see what would open; without it the platform opener runs.

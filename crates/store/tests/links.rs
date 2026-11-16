@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use sett_store::{Change, InboundLink, ItemId, Link, LinkTarget, Space, SpaceIndex, Store};
+use nibbet_store::{Change, InboundLink, ItemId, Link, LinkTarget, Space, SpaceIndex, Store};
 
 fn write(root: &Path, rel: &str, text: &str) {
     let path = root.join(rel);
@@ -11,7 +11,7 @@ fn write(root: &Path, rel: &str, text: &str) {
 
 fn new_store() -> (tempfile::TempDir, Store) {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path().join("sett")).unwrap();
+    let store = Store::open(dir.path().join("nibbet")).unwrap();
     (dir, store)
 }
 
@@ -109,7 +109,7 @@ fn journal_entries_are_linked_by_date() {
     write(&root, "work/journal/2026-11-09.md", "Met about [[plan]]\n");
     write(&root, "work/notes/plan.md", "From [[2026-11-09]]\n");
     let index = SpaceIndex::scan(&store, Space::Work);
-    let day = ItemId::Journal(sett_store::Date::parse("2026-11-09").unwrap());
+    let day = ItemId::Journal(nibbet_store::Date::parse("2026-11-09").unwrap());
 
     assert_eq!(
         index.resolve("2026-11-09"),
@@ -128,7 +128,7 @@ fn journal_entries_are_linked_by_date() {
     assert_eq!(index.title(&space_note("plan")).as_deref(), Some("plan"));
 }
 
-/// Agents can create files sett would never name the same.
+/// Agents can create files nibbet would never name the same.
 #[test]
 fn duplicate_slugs_resolve_by_path_with_space_notes_first() {
     let (_dir, store) = new_store();
@@ -237,7 +237,7 @@ fn links_never_reach_the_other_space() {
 fn new_items_get_slugs_unique_across_the_space() {
     let (_dir, store) = new_store();
     let root = store.root().to_path_buf();
-    let today = sett_store::Date::parse("2026-11-09").unwrap();
+    let today = nibbet_store::Date::parse("2026-11-09").unwrap();
     write(&root, "work/notes/plan.md", "");
     write(&root, "work/projects/site/tasks/plan-2.md", "");
     write(

@@ -1,8 +1,8 @@
-//! Converting between sett-store's `Date` and chrono, which the app uses for
+//! Converting between nibbet-store's `Date` and chrono, which the app uses for
 //! the local date, formatting and the date picker.
 
 use chrono::{Datelike, NaiveDate};
-use sett_store::Date;
+use nibbet_store::Date;
 
 pub(crate) fn to_chrono(date: Date) -> Option<NaiveDate> {
     NaiveDate::from_ymd_opt(
@@ -12,7 +12,7 @@ pub(crate) fn to_chrono(date: Date) -> Option<NaiveDate> {
     )
 }
 
-/// `None` for a year sett-store can't hold.
+/// `None` for a year nibbet-store can't hold.
 pub(crate) fn from_chrono(date: impl Datelike) -> Option<Date> {
     Date::new(
         u16::try_from(date.year()).ok()?,

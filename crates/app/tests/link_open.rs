@@ -9,7 +9,7 @@ use gpui_kit::{
     AppContext as _, InputEvent as _, Modifiers, ModifiersChangedEvent, MouseButton,
     TestAppContext, Window,
 };
-use sett::Selection;
+use nibbet::Selection;
 
 fn open_plan(cx: &mut TestAppContext, body: &str) -> Fixture {
     let f = open_shell(cx);

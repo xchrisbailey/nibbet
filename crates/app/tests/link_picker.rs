@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use common::{Fixture, click_label, has_label, input, note, open_shell, press, settle, write_aged};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Role, TestAppContext};
-use sett::Selection;
-use sett_store::{Change, ItemId};
+use nibbet::Selection;
+use nibbet_store::{Change, ItemId};
 
 /// A Space with a few Items, then the Note "Plan" open with the caret on a
 /// new empty line under its first line.
@@ -491,7 +491,7 @@ fn creating_from_a_task_makes_a_note_in_its_project(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn creating_from_a_journal_entry_makes_a_space_level_note(cx: &mut TestAppContext) {
     let (f, _) = on_a_new_line(cx);
-    let date = sett_store::Date::parse("2026-11-02").unwrap();
+    let date = nibbet_store::Date::parse("2026-11-02").unwrap();
     write_aged(
         cx,
         &f,

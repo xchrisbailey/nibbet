@@ -14,8 +14,8 @@ use gpui_kit::{
     Styled as _, TestAppContext, Window, WindowBounds, WindowOptions, div, point, px, size,
 };
 use markdown_editor::{BlockEditor, BlockEditorState};
-use sett::Selection;
-use sett_store::Change;
+use nibbet::Selection;
+use nibbet_store::Change;
 
 /// Opens the Note `plan` with `body`, next to a Note "Budget plan" (`budget`)
 /// and two Items sharing the slug `twin`, with the caret at the end.

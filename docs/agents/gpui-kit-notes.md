@@ -9,7 +9,7 @@ Imports: `use gpui_kit::*;` gives GPUI. `gpui_kit::component` re-exports `h_flex
 ## Project choices
 
 - **Project icons:** a curated set in `crates/app/src/icons.rs`, embedded through `icon_assets!` and layered over `gpui_kit::assets::Assets`. Add icons there, not through `AllAssets`.
-- **Dates:** `chrono` is used only in `crates/app`, for the DatePicker. Convert with `crates/app/src/dates.rs`. `sett-store` keeps its own `Date`.
+- **Dates:** `chrono` is used only in `crates/app`, for the DatePicker. Convert with `crates/app/src/dates.rs`. `nibbet-store` keeps its own `Date`.
 - **Watcher events** reach GPUI over `async-channel` (`Watcher::events()`).
 - **Light and Dark:** `gpui_kit::init` always starts in Light (`C/theme/mod.rs` `init`). `Shell::new` calls `Theme::sync_system_appearance` and re-syncs from `observe_window_appearance`. `--appearance light|dark` (and `scripts/screenshot --appearance`) forces one through `App::set_window_appearance`, which sets `NSApp.appearance`. Passing `-AppleInterfaceStyle Dark` doesn't change it.
 
@@ -26,7 +26,7 @@ Imports: `use gpui_kit::*;` gives GPUI. `gpui_kit::component` re-exports `h_flex
 ## Editor fork
 
 - **`crates/markdown-editor/FORK.md`** lists every patch to the forked block editor and why, including what gpui-kit keeps private (gpui-base's Code Block label, the syntect language lookup). Read it before changing the editor.
-- **The clipboard is plain text on macOS.** gpui writes one string plus its own private metadata tag, and reads back only that string, file paths and images. It never reads HTML or RTF, so what another app puts there as rich text (a rendered GitHub README's `<pre lang=…>`, VS Code's language id) never reaches sett.
+- **The clipboard is plain text on macOS.** gpui writes one string plus its own private metadata tag, and reads back only that string, file paths and images. It never reads HTML or RTF, so what another app puts there as rich text (a rendered GitHub README's `<pre lang=…>`, VS Code's language id) never reaches nibbet.
 
 ## Images, paste and drop
 
@@ -35,7 +35,7 @@ Found while building Attachments (#112). The full research is on the `research/a
 - **gpui-base's inline image element can't be styled.** `InlineFlow::image_element` (`B/text/inline_flow.rs`) is private and takes no style hook. So the fork draws host images itself (`crates/markdown-editor/src/image_object.rs`), and images in table cells still use the stock element.
 - **Custom inline objects are measured before the wrap width is known** (`prepare_objects` uses `AvailableSpace::MaxContent`). An object can't shrink itself to its column. `image_object.rs` shrinks to the leaf width recorded from the previous frame.
 - **gpui caches images by path for the life of the app, failures included.** Nothing reloads a changed file. Write a file before drawing a link to it, and clear the editor's `RetainAllImageCache` when files change on disk.
-- **Only `data:` image URLs load without help.** Every other URL goes to the HTTP client, and sett has none. The host resolves relative paths through the fork's `set_image_display`.
+- **Only `data:` image URLs load without help.** Every other URL goes to the HTTP client, and nibbet has none. The host resolves relative paths through the fork's `set_image_display`.
 - **`link_at` sees only text with a link mark.** Image atoms have none, so the fork falls back to the image's destination for ⌘-click.
 - **Under `ClipboardPolicy::Host` every paste goes through the host**, including plain text and the editor's own Code Block and Callout copies. Pass them on with `apply_paste`.
 - **gpui-kit's raw `Editor` has no copy hook.** To see a copy there, handle the `Copy` and `Cut` actions on a wrapper element.
@@ -227,7 +227,7 @@ window.open_dialog(cx, move |dialog, window, cx| {
 - It has `IconName::ALL` and `.path() -> "icons/<kebab>.svg"`, but no `FromStr` or name accessor.
 - Persist the kebab name and look it up with `ALL.iter().find(|i| i.path() == format!("icons/{name}.svg"))`.
 - `component::IconName` is the default subset of about 106 icons (`A/default-icons.txt`), with no `ALL`.
-- Rendering icons outside the default subset needs `.with_assets(gpui_kit::assets::AllAssets)` or your own `icon_assets!` source. sett uses the latter (see Project choices).
+- Rendering icons outside the default subset needs `.with_assets(gpui_kit::assets::AllAssets)` or your own `icon_assets!` source. nibbet uses the latter (see Project choices).
 - `Icon::new(name)` works for any `IconNamed`.
 
 ## Actions and keybindings

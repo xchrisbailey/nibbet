@@ -15,7 +15,7 @@ use gpui_kit::{
 use markdown_editor::{
     BlockEditor, BlockEditorEvent, BlockEditorState, BlockKind, ClipboardPolicy, PasteRequest,
 };
-use sett_store::{
+use nibbet_store::{
     AttachmentOwner, Date, EditorMode, JournalEntry, LinkTarget, Note, Space, Template,
 };
 
@@ -135,7 +135,7 @@ impl EditorTarget {
 enum Version {
     Note(Note),
     Journal(JournalEntry),
-    Task(sett_store::Task),
+    Task(nibbet_store::Task),
     Template(Template),
 }
 
@@ -178,13 +178,13 @@ impl Version {
 /// body in the block view or as raw Markdown, following the global mode.
 ///
 /// The body is the only part the editor sees; frontmatter stays with
-/// sett-store. The file is written only after a real edit (ADR 0003): 500 ms
-/// after the last one, when another Item is opened, or when sett quits.
+/// nibbet-store. The file is written only after a real edit (ADR 0003): 500 ms
+/// after the last one, when another Item is opened, or when nibbet quits.
 pub(crate) struct ItemEditor {
     model: Entity<AppModel>,
     target: Option<EditorTarget>,
     /// The file as last read or written, or `None` when there is no file
-    /// (yet). An index version that differs from this changed outside sett.
+    /// (yet). An index version that differs from this changed outside nibbet.
     seen: Option<Version>,
     /// What a save starts from, so frontmatter keys the editor doesn't know
     /// about survive.
@@ -283,7 +283,7 @@ impl ItemEditor {
             cx.observe_in(&model, window, |this, _, window, cx| this.sync(window, cx)),
             cx.on_app_quit(|this, cx| {
                 if let Err(err) = this.save(cx) {
-                    eprintln!("sett: couldn't save on quit: {err}");
+                    eprintln!("nibbet: couldn't save on quit: {err}");
                 }
                 async {}
             }),
@@ -605,7 +605,7 @@ impl ItemEditor {
             alert
                 .confirm()
                 .keyboard(false)
-                .title("Changed outside sett")
+                .title("Changed outside nibbet")
                 .description(
                     "This file changed on disk while you had unsaved edits. \
                      Keep yours and overwrite the file, or load the version on disk?",
@@ -674,7 +674,7 @@ impl ItemEditor {
     }
 
     /// Like [`Self::refresh_attachments`] but keeps the decoded images, for
-    /// sett's own writes: a new file can't be among the images that failed to
+    /// nibbet's own writes: a new file can't be among the images that failed to
     /// load (it was written before its link), so clearing would only flash
     /// every image back to its loading box.
     fn rebuild_attachments(&mut self, cx: &mut Context<Self>) {
@@ -753,7 +753,7 @@ impl ItemEditor {
     /// A paste of text copied from another Item: copies the files it links
     /// to into this Item's folder (off the UI thread) and pastes the text
     /// pointing at the copies, as one undo step. Returns false, having done
-    /// nothing, when the text isn't that: from outside sett, or from this
+    /// nothing, when the text isn't that: from outside nibbet, or from this
     /// same Item.
     fn carry_paste(
         &mut self,
@@ -1087,7 +1087,7 @@ impl ItemEditor {
                     .block
                     .update(cx, |block, cx| block.set_source(&body, cx));
                 if let Err(err) = result {
-                    eprintln!("sett: couldn't show the block view: {err}");
+                    eprintln!("nibbet: couldn't show the block view: {err}");
                 }
                 self.refresh_link_data(cx);
                 self.refresh_insert_options(cx);

@@ -11,8 +11,8 @@ use std::time::{Duration, SystemTime};
 use common::{Fixture, center_title, click_label, open_shell};
 use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{AppContext as _, TestAppContext};
-use sett::Selection;
-use sett_store::{Change, EditorMode, Settings};
+use nibbet::Selection;
+use nibbet_store::{Change, EditorMode, Settings};
 
 const JOURNAL: &str = "0-0";
 const WEBSITE: &str = "1-1";
@@ -21,7 +21,7 @@ const WEBSITE: &str = "1-1";
 const AFTER_AUTOSAVE: Duration = Duration::from_secs(2);
 
 /// Markdown the block editor would normalise on save (`__bold__`, a setext
-/// heading), behind a YAML comment that never survives a rewrite by sett.
+/// heading), behind a YAML comment that never survives a rewrite by nibbet.
 const HAND_WRITTEN: &str =
     "---\n# by hand\ntitle: Plan\n---\nHeading\n=======\n\nSome __bold__ text\n";
 

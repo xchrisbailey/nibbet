@@ -1,7 +1,7 @@
 //! The Space's Templates as Insert Menu rows, after the block types.
 
 use markdown_editor::{EditorCommand, InsertMenuOption};
-use sett_store::Template;
+use nibbet_store::Template;
 
 /// What an Insert Menu row the host handles asks for. The id the editor
 /// reports back is encoded and decoded only here.

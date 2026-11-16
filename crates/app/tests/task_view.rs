@@ -14,8 +14,8 @@ use gpui_kit::{
     AnyWindowHandle, AppContext, Bounds, Entity, MouseButton, TestAppContext, WindowBounds,
     WindowOptions, point, px, size,
 };
-use sett::{AppModel, Shell};
-use sett_store::{Change, Settings};
+use nibbet::{AppModel, Shell};
+use nibbet_store::{Change, Settings};
 
 struct Fixture {
     _dir: tempfile::TempDir,
@@ -32,12 +32,12 @@ fn open_board(cx: &mut TestAppContext, tasks: &[(&str, &str, f64, &str)]) -> Fix
     let tasks_dir = settings.data_root.join("personal/projects/inbox/tasks");
     cx.update(|cx| {
         gpui_kit::init(cx);
-        sett::init(cx);
+        nibbet::init(cx);
     });
     let model = cx.update(|cx| AppModel::open_unwatched(settings, None, cx).unwrap());
     fs::create_dir_all(&tasks_dir).unwrap();
     for (slug, column, order, extra) in tasks {
-        // A YAML comment never survives a rewrite by sett, so it marks a file
+        // A YAML comment never survives a rewrite by nibbet, so it marks a file
         // as untouched.
         let text = format!(
             "---\n# by hand\ntitle: {slug}\ncolumn: {column}\norder: {order}\n{extra}---\nSome __bold__ body\n"
@@ -532,7 +532,7 @@ fn a_change_to_another_task_leaves_what_is_typed_alone(cx: &mut TestAppContext) 
 
 #[gpui_kit::test]
 fn setting_the_labels_a_task_already_has_leaves_its_file_alone(cx: &mut TestAppContext) {
-    // Spelled in a way sett wouldn't write back: only a real change may rewrite it.
+    // Spelled in a way nibbet wouldn't write back: only a real change may rewrite it.
     let f = open_board(cx, &[("a", "Todo", 1.0, "labels: [\"bug\",   docs]\n")]);
     let before = snapshot(&task_path(&f, "a"));
     let same = vec!["bug".to_string(), "docs".to_string()];

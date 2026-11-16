@@ -11,7 +11,7 @@ use gpui_kit::{App, AppContext as _, ClipboardEntry, ClipboardItem, Context, Win
 use markdown_editor::{
     BlockEditorState, BlockId, BlockKind, BlockPosition, BlockSelection, PasteRequest,
 };
-use sett_store::{AttachmentOwner, Resolved, Space, Store};
+use nibbet_store::{AttachmentOwner, Resolved, Space, Store};
 
 /// Something to attach.
 #[derive(Debug, Clone)]
@@ -281,7 +281,7 @@ pub(crate) fn remember_copy(
 }
 
 /// Where `text` was copied from, when that is another Item than `to`: the
-/// paste then carries its Attachments. `None` for text from outside sett or
+/// paste then carries its Attachments. `None` for text from outside nibbet or
 /// from the same Item.
 pub(crate) fn copied_from(
     cx: &App,

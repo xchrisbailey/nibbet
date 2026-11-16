@@ -4,8 +4,8 @@ use std::fs;
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext, Bounds, TestAppContext, WindowBounds, WindowOptions, px, size};
-use sett::{AppModel, Shell};
-use sett_store::{Change, Settings};
+use nibbet::{AppModel, Shell};
+use nibbet_store::{Change, Settings};
 
 mod common;
 use common::find_card;
@@ -18,7 +18,7 @@ fn open_board(cx: &mut TestAppContext, tasks: &[(&str, &str)]) -> gpui_kit::AnyW
     let tasks_dir = settings.data_root.join("personal/projects/inbox/tasks");
     cx.update(|cx| {
         gpui_kit::init(cx);
-        sett::init(cx);
+        nibbet::init(cx);
     });
     let model = cx.update(|cx| AppModel::open_unwatched(settings, None, cx).unwrap());
     fs::create_dir_all(&tasks_dir).unwrap();
@@ -54,12 +54,15 @@ fn open_board(cx: &mut TestAppContext, tasks: &[(&str, &str)]) -> gpui_kit::AnyW
 fn a_card_shows_three_chips_and_counts_the_rest(cx: &mut TestAppContext) {
     let window = open_board(
         cx,
-        &[("many", "labels: [bug, sett, docs, ui, api]"), ("none", "")],
+        &[
+            ("many", "labels: [bug, nibbet, docs, ui, api]"),
+            ("none", ""),
+        ],
     );
     cx.update_window(window, |_, window, cx| {
         window.render_frame(cx);
         let row = window.within("card-labels-many");
-        for shown in ["bug", "sett", "docs"] {
+        for shown in ["bug", "nibbet", "docs"] {
             assert!(row.try_find_by_label(shown).is_some(), "{shown} missing");
         }
         for hidden in ["ui", "api"] {
@@ -70,7 +73,7 @@ fn a_card_shows_three_chips_and_counts_the_rest(cx: &mut TestAppContext) {
         assert!(window.try_find("card-labels-none").is_none());
         assert_eq!(
             find_card(window, "many").description(),
-            Some("Labels: bug, sett, docs, ui, api")
+            Some("Labels: bug, nibbet, docs, ui, api")
         );
         assert_eq!(find_card(window, "none").description(), None);
     })

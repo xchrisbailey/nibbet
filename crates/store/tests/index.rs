@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use sett_store::{Change, Date, Space, SpaceIndex, Store, Update};
+use nibbet_store::{Change, Date, Space, SpaceIndex, Store, Update};
 
 fn write(root: &Path, rel: &str, text: &str) {
     let path = root.join(rel);
@@ -11,7 +11,7 @@ fn write(root: &Path, rel: &str, text: &str) {
 
 fn new_store() -> (tempfile::TempDir, Store) {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path().join("sett")).unwrap();
+    let store = Store::open(dir.path().join("nibbet")).unwrap();
     (dir, store)
 }
 

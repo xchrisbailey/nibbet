@@ -8,8 +8,8 @@ use std::fs;
 use common::{Fixture, center_title, click_label, open_shell};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, TestAppContext};
-use sett::Selection;
-use sett_store::{Change, ItemId};
+use nibbet::Selection;
+use nibbet_store::{Change, ItemId};
 
 fn write(cx: &mut TestAppContext, f: &Fixture, rel: &str, text: &str, change: Change) {
     let path = f.data_root.join("personal").join(rel);
@@ -76,7 +76,7 @@ fn inbound_links_show_under_the_body_and_open_their_item(cx: &mut TestAppContext
         &f,
         "journal/2026-11-02.md",
         "Talked about [[plan|the plan]]\n",
-        Change::Journal(sett_store::Date::parse("2026-11-02").unwrap()),
+        Change::Journal(nibbet_store::Date::parse("2026-11-02").unwrap()),
     );
     open_note(cx, &f, None, "plan");
 

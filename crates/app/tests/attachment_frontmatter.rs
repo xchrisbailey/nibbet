@@ -13,8 +13,8 @@ use gpui_kit::{
     AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, FileDropEvent, Image,
     ImageFormat, InputEvent as _, TestAppContext, point, px,
 };
-use sett::Selection;
-use sett_store::Change;
+use nibbet::Selection;
+use nibbet_store::Change;
 
 const BROKEN: &str = "---\ntitle: A\ntitle: B\n---\nBody\n";
 

@@ -9,8 +9,8 @@ use gpui_kit::{
     AnyWindowHandle, AppContext, Bounds, Entity, Role, TestAppContext, WindowBounds, WindowOptions,
     px, size,
 };
-use sett::{AppModel, Selection, Shell};
-use sett_store::{Change, Settings, Space};
+use nibbet::{AppModel, Selection, Shell};
+use nibbet_store::{Change, Settings, Space};
 
 mod common;
 use common::click_label;
@@ -32,7 +32,7 @@ fn open_board(cx: &mut TestAppContext, tasks: &[Seed]) -> Fixture {
     let tasks_dir = settings.data_root.join("personal/projects/inbox/tasks");
     cx.update(|cx| {
         gpui_kit::init(cx);
-        sett::init(cx);
+        nibbet::init(cx);
     });
     let model = cx.update(|cx| AppModel::open_unwatched(settings, None, cx).unwrap());
     fs::create_dir_all(&tasks_dir).unwrap();
@@ -148,7 +148,7 @@ fn header_count(cx: &mut TestAppContext, f: &Fixture, column: &'static str) -> S
 
 const SEEDS: [Seed; 4] = [
     ("fix-crash", "Todo", "labels: [Bug]", None),
-    ("write-docs", "Todo", "labels: [docs, sett]", None),
+    ("write-docs", "Todo", "labels: [docs, nibbet]", None),
     ("plain", "Todo", "", None),
     ("ship", "Doing", "labels: [bug, ui]", None),
 ];

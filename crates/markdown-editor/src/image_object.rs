@@ -2,7 +2,7 @@
 //!
 //! gpui-base's `InlineFlow::image_element` is private and has no style hook,
 //! so a loaded image can't get a border, a radius or a height cap. Instead the
-//! projection swaps the image atom for an `sett-image` object (one `U+FFFC`,
+//! projection swaps the image atom for an `nibbet-image` object (one `U+FFFC`,
 //! like a Link chip) that draws `img(source)` itself:
 //!
 //! - natural size, one image pixel per point,
@@ -46,7 +46,7 @@ use super::host_display::{
     ImageDisplayFn, PlaceholderData, percent_decode, placeholder_chip, source_for,
 };
 
-pub(crate) const IMAGE_OBJECT: &str = "sett-image";
+pub(crate) const IMAGE_OBJECT: &str = "nibbet-image";
 
 /// The tallest an image is drawn, border included.
 pub(crate) const MAX_HEIGHT: Pixels = px(480.);
@@ -193,7 +193,7 @@ impl ImageWidths {
     }
 }
 
-/// Draws `sett-image` nodes.
+/// Draws `nibbet-image` nodes.
 pub(crate) struct ImageObjectPlugin {
     pub(crate) widths: ImageWidths,
 }

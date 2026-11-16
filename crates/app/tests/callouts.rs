@@ -14,8 +14,8 @@ use gpui_kit::{
     Render, Styled as _, TestAppContext, Window, WindowBounds, WindowOptions, div, point, px, size,
 };
 use markdown_editor::{BlockEditor, BlockEditorState, BlockKind};
-use sett::Selection;
-use sett_store::Change;
+use nibbet::Selection;
+use nibbet_store::Change;
 
 /// Longer than the autosave delay.
 const AFTER_AUTOSAVE: Duration = Duration::from_secs(2);

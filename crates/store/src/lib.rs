@@ -1,4 +1,4 @@
-//! On-disk data layer for sett (ADR 0001): Items are Markdown files with YAML
+//! On-disk data layer for nibbet (ADR 0001): Items are Markdown files with YAML
 //! frontmatter under `<root>/<space>/`.
 //!
 //! Loading never fails and never modifies files. Writing only happens through
@@ -36,7 +36,7 @@ pub use item::{
     JournalEntry, Note, RECENT_DONE_DAYS, Task, Template, labels_of, normalize_labels, same_label,
 };
 pub use links::{InboundLink, ItemId, Link, LinkTarget};
-pub use settings::{EditorMode, Settings};
+pub use settings::{EditorMode, SettMigration, Settings};
 pub use watch::Watcher;
 use watch::WriteLog;
 
@@ -82,8 +82,8 @@ impl Project {
         self.slug == INBOX_SLUG
     }
 
-    /// Whether `project.md`'s frontmatter couldn't be read. sett never writes
-    /// such a Project, so its name, icon and Columns can't be changed in sett.
+    /// Whether `project.md`'s frontmatter couldn't be read. nibbet never writes
+    /// such a Project, so its name, icon and Columns can't be changed in nibbet.
     pub fn frontmatter_error(&self) -> bool {
         self.unreadable.is_some()
     }
@@ -153,10 +153,10 @@ impl Store {
             store.first_run()?;
         }
         // AGENTS.md is a courtesy for other tools; a read-only or unwritable
-        // one must not stop sett launching.
+        // one must not stop nibbet launching.
         if let Err(err) = agents::sync(&store.root) {
             eprintln!(
-                "sett: couldn't update AGENTS.md in {}: {err}",
+                "nibbet: couldn't update AGENTS.md in {}: {err}",
                 store.root.display()
             );
         }
@@ -678,11 +678,11 @@ impl Store {
             return Err(invalid(format!("invalid path {path:?}")));
         };
         self.create_dirs(dir)?;
-        let tmp = dir.join(format!(".{}.sett-tmp", name.to_string_lossy()));
+        let tmp = dir.join(format!(".{}.nibbet-tmp", name.to_string_lossy()));
         let text = doc.render();
         fs::write(&tmp, &text)?;
         // Logged before the rename so the watcher can't see the new content
-        // before it knows sett wrote it.
+        // before it knows nibbet wrote it.
         self.log.file(self.rel(path), text.as_bytes());
         fs::rename(&tmp, path)
     }
@@ -705,7 +705,7 @@ impl Store {
         path.strip_prefix(&self.root).unwrap_or(path).to_path_buf()
     }
 
-    /// Starts watching one Space for changes made outside sett. sett's own
+    /// Starts watching one Space for changes made outside nibbet. nibbet's own
     /// writes through this `Store` are not reported.
     pub fn watch(&self, space: Space) -> io::Result<Watcher> {
         Watcher::start(&self.root, space, self.log.clone())
@@ -796,7 +796,7 @@ fn unreadable_frontmatter(path: &Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
         format!(
-            "the frontmatter of {} can't be read, so sett won't save it",
+            "the frontmatter of {} can't be read, so nibbet won't save it",
             path.display()
         ),
     )

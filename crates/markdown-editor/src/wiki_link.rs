@@ -74,7 +74,7 @@ pub(crate) type HoverHandle = Arc<RwLock<Option<ChipKey>>>;
 
 const ICON_LINK: &[u8] = include_bytes!("../assets/icons/file-text.svg");
 
-/// Draws `sett-wiki-chip` nodes. It parses nothing: the projection makes the
+/// Draws `nibbet-wiki-chip` nodes. It parses nothing: the projection makes the
 /// chips.
 pub(crate) struct WikiChipPlugin {
     pub(crate) directory: DirectoryHandle,

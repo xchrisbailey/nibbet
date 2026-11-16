@@ -17,7 +17,7 @@ use gpui_kit::{
     Styled as _, Subscription, TestSupportExt as _, Window, actions, div,
     prelude::FluentBuilder as _,
 };
-use sett_store::{Board, Date, ItemId, Space, same_label};
+use nibbet_store::{Board, Date, ItemId, Space, same_label};
 
 use crate::app_model::AppModel;
 use crate::confirm_delete::{ITEM_CONSEQUENCE, confirm_delete};
@@ -25,7 +25,7 @@ use crate::dates::{from_chrono, to_chrono};
 use crate::item_editor::{ItemEditor, ItemRef};
 use crate::label_field::{LabelOptions, render_trigger, spelled_like_the_space};
 
-actions!(sett, [CloseTask]);
+actions!(nibbet, [CloseTask]);
 
 const CONTEXT: &str = "TaskView";
 

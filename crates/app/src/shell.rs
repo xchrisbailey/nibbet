@@ -5,7 +5,7 @@ use gpui_kit::{
     KeyBinding, MouseButton, ParentElement as _, Render, Styled as _, Subscription, Window,
     actions, div, prelude::FluentBuilder as _,
 };
-use sett_store::Space;
+use nibbet_store::Space;
 
 use crate::app_model::{AppModel, Selection};
 use crate::center::CenterPanel;
@@ -13,7 +13,7 @@ use crate::nav::Nav;
 use crate::project_dialog;
 
 actions!(
-    sett,
+    nibbet,
     [ShowPersonal, ShowWork, ToggleEditorMode, GoBack, GoForward]
 );
 
@@ -21,7 +21,7 @@ actions!(
 // on the selected Project and is only handled when it applies, which is what
 // enables or disables its menu item.
 actions!(
-    sett,
+    nibbet,
     [
         NewProject,
         EditProject,

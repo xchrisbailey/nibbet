@@ -14,7 +14,7 @@ use gpui_kit::{
 
 use crate::labels::label_badge;
 use crate::task_view::TaskView;
-use sett_store::same_label;
+use nibbet_store::same_label;
 
 /// A row of the popup: a Label of the Space, or the row that creates the
 /// Label being typed. Both are valued by the Label's text, so adding through

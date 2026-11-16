@@ -7,7 +7,7 @@ use gpui_kit::{
     Subscription, TestSupportExt as _, Window, div, prelude::FluentBuilder as _,
 };
 
-use sett_store::{ItemId, Space};
+use nibbet_store::{ItemId, Space};
 
 use crate::app_model::{AppModel, AppModelEvent, Selection};
 use crate::board::{BoardEvent, BoardView};

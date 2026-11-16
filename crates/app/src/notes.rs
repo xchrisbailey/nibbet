@@ -15,14 +15,14 @@ use gpui_kit::{
     SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _,
     Window, actions, div, prelude::FluentBuilder as _,
 };
-use sett_store::{ItemId, Note, Space};
+use nibbet_store::{ItemId, Note, Space};
 
 use crate::app_model::{AppModel, Selection};
 use crate::confirm_delete::{ITEM_CONSEQUENCE, confirm_delete};
 use crate::item_editor::{ItemEditor, ItemRef};
 use crate::split;
 
-actions!(sett, [OpenNote]);
+actions!(nibbet, [OpenNote]);
 
 const ROW_CONTEXT: &str = "NoteRow";
 

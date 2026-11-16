@@ -3,7 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Task};
-use sett_store::{
+use nibbet_store::{
     AttachmentOwner, Board, Change, Date, EditorMode, INBOX_SLUG, ItemId, JournalEntry, Note,
     Project, Settings, Space, SpaceIndex, Store, Template, Update, Watcher,
 };
@@ -34,7 +34,7 @@ pub enum AppModelEvent {
     OpenItem(ItemId),
     /// Show this Template of the active Space on the Templates screen.
     OpenTemplate(String),
-    /// Something in this Item's Attachment folder changed outside sett, so
+    /// Something in this Item's Attachment folder changed outside nibbet, so
     /// what the body showed of it may be stale.
     AttachmentChanged(AttachmentOwner),
 }
@@ -365,7 +365,7 @@ impl AppModel {
         })
     }
 
-    /// sett's own writes aren't reported by the watcher, so the index is
+    /// nibbet's own writes aren't reported by the watcher, so the index is
     /// brought up to date here instead.
     fn reload_project(&mut self, slug: &str, cx: &mut Context<Self>) {
         self.apply_change(Change::Project(slug.to_string()), cx);
@@ -555,7 +555,7 @@ impl AppModel {
     /// an edit is saved on the way out of it.
     pub fn save_task(
         &mut self,
-        task: &mut sett_store::Task,
+        task: &mut nibbet_store::Task,
         cx: &mut Context<Self>,
     ) -> io::Result<()> {
         self.store.save_task(task)?;
@@ -610,7 +610,7 @@ impl AppModel {
         let task = self.index.task(project, slug).ok_or_else(|| {
             io::Error::new(io::ErrorKind::NotFound, format!("task {slug} not found"))
         })?;
-        if task.labels == sett_store::normalize_labels(labels) {
+        if task.labels == nibbet_store::normalize_labels(labels) {
             return Ok(());
         }
         self.store
@@ -621,12 +621,12 @@ impl AppModel {
 
     /// Every Label the Project's Tasks use, sorted ignoring case.
     pub fn project_labels(&self, project: &str) -> Vec<String> {
-        sett_store::labels_of(self.index.tasks(project))
+        nibbet_store::labels_of(self.index.tasks(project))
     }
 
     /// Every Label the active Space's Tasks use, sorted ignoring case.
     pub fn space_labels(&self) -> Vec<String> {
-        sett_store::labels_of(
+        nibbet_store::labels_of(
             self.index
                 .projects()
                 .into_iter()
@@ -687,7 +687,7 @@ impl AppModel {
         &mut self,
         slug: &str,
         cx: &mut Context<Self>,
-        edit: impl FnOnce(&Store, &mut Project, Vec<&sett_store::Task>) -> io::Result<()>,
+        edit: impl FnOnce(&Store, &mut Project, Vec<&nibbet_store::Task>) -> io::Result<()>,
     ) -> io::Result<()> {
         let mut project = self.find_project(slug)?.clone();
         let result = edit(&self.store, &mut project, self.index.tasks(slug));
@@ -724,7 +724,10 @@ impl AppModel {
         {
             // Not worth interrupting the user: the worst case is reopening in
             // the other Space or editor mode.
-            eprintln!("sett: couldn't save settings to {}: {err}", path.display());
+            eprintln!(
+                "nibbet: couldn't save settings to {}: {err}",
+                path.display()
+            );
         }
     }
 }
@@ -808,7 +811,7 @@ fn watch(store: &Store, space: Space, cx: &mut Context<AppModel>) -> Option<Watc
     let watcher = match store.watch(space) {
         Ok(watcher) => watcher,
         Err(err) => {
-            eprintln!("sett: couldn't watch {}: {err}", space.dir_name());
+            eprintln!("nibbet: couldn't watch {}: {err}", space.dir_name());
             return None;
         }
     };

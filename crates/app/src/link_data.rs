@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use markdown_editor::{LinkCandidate, WikiLinkDirectory, WikiLinkInfo, WikiLinkState};
-use sett_store::{ItemId, LinkTarget, SpaceIndex};
+use nibbet_store::{ItemId, LinkTarget, SpaceIndex};
 
 use crate::item_links::kind_label;
 
@@ -40,7 +40,7 @@ pub(crate) fn wiki_link_directory(
 /// Journal Entry of the Space except that one and those in archived Projects.
 ///
 /// An Item is `reachable` only if a Link to its slug resolves to it; when
-/// another Item shares the slug (after edits made outside sett) the Link
+/// another Item shares the slug (after edits made outside nibbet) the Link
 /// would open the wrong one, so the picker won't insert it.
 pub(crate) fn link_candidates(
     index: &SpaceIndex,

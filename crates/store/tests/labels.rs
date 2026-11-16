@@ -1,6 +1,6 @@
 use std::fs;
 
-use sett_store::{Date, Space, Store};
+use nibbet_store::{Date, Space, Store};
 
 fn today() -> Date {
     Date::parse("2026-03-01").unwrap()
@@ -8,13 +8,13 @@ fn today() -> Date {
 
 fn new_store() -> (tempfile::TempDir, Store) {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path().join("sett")).unwrap();
+    let store = Store::open(dir.path().join("nibbet")).unwrap();
     (dir, store)
 }
 
 fn task_path(dir: &tempfile::TempDir, slug: &str) -> std::path::PathBuf {
     dir.path()
-        .join(format!("sett/work/projects/inbox/tasks/{slug}.md"))
+        .join(format!("nibbet/work/projects/inbox/tasks/{slug}.md"))
 }
 
 fn write_task(dir: &tempfile::TempDir, slug: &str, frontmatter: &str) {
@@ -119,7 +119,7 @@ fn a_projects_labels_are_deduped_ignoring_case_and_sorted() {
     write_task(&dir, "b", "labels: [BUG, alpha]\ndone: 2026-01-01\n");
 
     let tasks = store.tasks(Space::Work, "inbox");
-    let found = sett_store::labels_of(&tasks);
+    let found = nibbet_store::labels_of(&tasks);
 
     assert_eq!(found.len(), 3);
     assert_eq!(found, ["alpha", "Bug", "zed"]);

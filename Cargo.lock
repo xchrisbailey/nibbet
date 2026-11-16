@@ -4380,6 +4380,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
+name = "nibbet"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "gpui-kit",
+ "gpui-kit-markdown-editor",
+ "nibbet-store",
+ "tempfile",
+]
+
+[[package]]
+name = "nibbet-store"
+version = "0.1.0"
+dependencies = [
+ "async-channel",
+ "notify",
+ "serde",
+ "serde_yaml_ng",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+ "trash",
+]
+
+[[package]]
 name = "no_std_io2"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6497,30 +6521,6 @@ dependencies = [
  "ryu",
  "serde",
  "unsafe-libyaml",
-]
-
-[[package]]
-name = "sett"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "gpui-kit",
- "gpui-kit-markdown-editor",
- "sett-store",
- "tempfile",
-]
-
-[[package]]
-name = "sett-store"
-version = "0.1.0"
-dependencies = [
- "async-channel",
- "notify",
- "serde",
- "serde_yaml_ng",
- "tempfile",
- "toml 0.9.12+spec-1.1.0",
- "trash",
 ]
 
 [[package]]

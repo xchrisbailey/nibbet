@@ -4,7 +4,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use async_channel::Receiver;
-use sett_store::{AttachmentOwner, Change, Date, JournalEntry, Space, Store};
+use nibbet_store::{AttachmentOwner, Change, Date, JournalEntry, Space, Store};
 
 /// FSEvents latency varies, so wait up to a bound rather than a fixed sleep.
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -17,7 +17,7 @@ fn write(root: &Path, rel: &str, text: &str) {
 
 fn new_store() -> (tempfile::TempDir, Store) {
     let dir = tempfile::tempdir().unwrap();
-    let mut store = Store::open(dir.path().join("sett")).unwrap();
+    let mut store = Store::open(dir.path().join("nibbet")).unwrap();
     store.set_trash(|path| {
         if path.is_dir() {
             fs::remove_dir_all(path)
@@ -158,7 +158,7 @@ fn own_writes_and_other_space_are_ignored() {
     let mut t = store
         .create_task(Space::Work, "inbox", "Own task", today)
         .unwrap();
-    t.title = "Renamed by sett".into();
+    t.title = "Renamed by nibbet".into();
     store.save_task(&mut t).unwrap();
     let mut project = store
         .create_project(Space::Work, "Own project", None)

@@ -4,11 +4,11 @@
 
 use gpui_kit::base::text::MarkdownExtensions;
 use markdown_editor::{BlockEditorModel, BlockKind, BlockRef, CalloutKind};
-use sett_store::{CalloutKind as TaskCalloutKind, Date, Space, Store, Task};
+use nibbet_store::{CalloutKind as TaskCalloutKind, Date, Space, Store, Task};
 
 fn task_with_body(body: &str) -> Task {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path().join("sett")).unwrap();
+    let store = Store::open(dir.path().join("nibbet")).unwrap();
     let mut task = store
         .create_task(
             Space::Work,

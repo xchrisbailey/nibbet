@@ -1,5 +1,5 @@
 //! UI integration tests for the Templates screen: creating, renaming,
-//! deleting and following changes made outside sett.
+//! deleting and following changes made outside nibbet.
 
 mod common;
 
@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use common::{Fixture, click_label, open_shell, settle};
 use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
-use sett::Selection;
-use sett_store::Change;
+use nibbet::Selection;
+use nibbet_store::Change;
 
 fn templates_dir(f: &Fixture) -> PathBuf {
     f.data_root.join("personal/templates")
@@ -252,7 +252,7 @@ fn renaming_a_template_works_in_the_templates_own_space(cx: &mut TestAppContext)
     let slug = cx
         .update(|cx| {
             model.update(cx, |w, _| {
-                w.rename_template(sett_store::Space::Work, "old", "New")
+                w.rename_template(nibbet_store::Space::Work, "old", "New")
             })
         })
         .unwrap();

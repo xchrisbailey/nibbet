@@ -1,13 +1,13 @@
 use std::fs;
 use std::path::Path;
 
-use sett_store::Store;
+use nibbet_store::Store;
 
 const SHIPPED_V1: &str = include_str!("../src/agents_v1.md");
 const SHIPPED_V2: &str = include_str!("../src/agents_v2.md");
 const SHIPPED_V3: &str = include_str!("../src/agents_v3.md");
-const BEGIN: &str = "<!-- sett:begin -->";
-const END: &str = "<!-- sett:end -->";
+const BEGIN: &str = "<!-- nibbet:begin -->";
+const END: &str = "<!-- nibbet:end -->";
 
 fn agents(root: &Path) -> String {
     fs::read_to_string(root.join("AGENTS.md")).unwrap()
@@ -22,7 +22,7 @@ fn marked_block(text: &str) -> &str {
 #[test]
 fn missing_file_is_written_with_markers_and_template_wording() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("sett");
+    let root = dir.path().join("nibbet");
 
     Store::open(&root).unwrap();
 
@@ -52,10 +52,28 @@ fn marked_block_is_replaced_and_text_outside_survives() {
     assert!(text.contains("# that Template's Attachments (optional)"));
 }
 
+/// The app was called sett before, and its block carried sett's markers.
+/// That block is swapped for the current one rather than kept beside it.
+#[test]
+fn a_block_from_before_the_rename_is_replaced() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let old = "my intro\n\n<!-- sett:begin -->\n# sett data\n<!-- sett:end -->\n\nmy outro\n";
+    fs::write(root.join("AGENTS.md"), old).unwrap();
+
+    Store::open(root).unwrap();
+
+    let text = agents(root);
+    assert!(!text.contains("sett:"), "{text}");
+    assert_eq!(text.matches(BEGIN).count(), 1);
+    assert!(text.starts_with("my intro\n\n"));
+    assert!(text.ends_with("\nmy outro\n"));
+}
+
 #[test]
 fn current_block_is_not_rewritten() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("sett");
+    let root = dir.path().join("nibbet");
     Store::open(&root).unwrap();
     let before = agents(&root);
     let mtime = fs::metadata(root.join("AGENTS.md"))
@@ -95,7 +113,7 @@ fn unmarked_shipped_versions_are_replaced_wholesale() {
 
         let text = agents(root);
         assert!(text.contains(BEGIN) && text.contains("templates/<slug>.md"));
-        assert_eq!(text.matches("# sett data").count(), 1);
+        assert_eq!(text.matches("# nibbet data").count(), 1);
     }
 }
 
@@ -109,7 +127,7 @@ fn unmarked_user_edited_file_gets_the_block_appended() {
     Store::open(root).unwrap();
 
     let text = agents(root);
-    assert!(text.starts_with("my own notes\n\n<!-- sett:begin -->\n"));
+    assert!(text.starts_with("my own notes\n\n<!-- nibbet:begin -->\n"));
     assert!(text.trim_end().ends_with(END));
     assert_eq!(text.matches(BEGIN).count(), 1);
     let again = marked_block(&text).to_string();

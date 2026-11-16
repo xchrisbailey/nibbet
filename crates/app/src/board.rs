@@ -24,7 +24,7 @@ use markdown_editor::CalloutKind;
 
 use crate::icons::FILTER_ICON;
 use crate::labels::label_badge;
-use sett_store::{
+use nibbet_store::{
     Board, BoardColumn, CalloutKind as TaskCalloutKind, Date, Space, Task, TaskCallout, same_label,
 };
 
@@ -32,7 +32,7 @@ use crate::app_model::{AppModel, Selection};
 use crate::confirm_delete::{ITEM_CONSEQUENCE, confirm_delete};
 use crate::dates::{to_chrono, today};
 
-actions!(sett, [OpenCard]);
+actions!(nibbet, [OpenCard]);
 
 const CARD_CONTEXT: &str = "Card";
 
@@ -227,7 +227,7 @@ impl BoardView {
     }
 
     /// Reloads the picker's options from the Project's Tasks, so they follow
-    /// edits made in or outside sett. A picked Label that no Task has any more
+    /// edits made in or outside nibbet. A picked Label that no Task has any more
     /// stays listed, so the filter never silently widens.
     fn refresh_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let mut options = self

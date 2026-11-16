@@ -3,7 +3,7 @@ use gpui_kit::component::menu::PopupMenuItem;
 use gpui_kit::component::sidebar::{Sidebar, SidebarMenu, SidebarMenuItem};
 use gpui_kit::component::{Icon, IconName, Sizable as _};
 use gpui_kit::{App, Entity, IntoElement, RenderOnce, SharedString, Window};
-use sett_store::Project;
+use nibbet_store::Project;
 
 use crate::app_model::{AppModel, Selection};
 use crate::icons::{TEMPLATES_ICON, project_icon};
