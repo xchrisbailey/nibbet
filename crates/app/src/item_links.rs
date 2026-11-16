@@ -5,7 +5,7 @@ use gpui_kit::{
     RenderOnce, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
     TestSupportExt as _, Window, div,
 };
-use sett_store::{ItemId, LinkTarget, SpaceIndex};
+use nibbet_store::{ItemId, LinkTarget, SpaceIndex};
 
 use crate::app_model::AppModel;
 use crate::item_editor::ItemRef;

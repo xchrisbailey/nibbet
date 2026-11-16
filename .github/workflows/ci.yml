@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   check:
-    # sett targets macOS only, and the GPUI build pulls in the macOS platform layer.
+    # nibbet targets macOS only, and the GPUI build pulls in the macOS platform layer.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

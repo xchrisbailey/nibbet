@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use sett_store::{Date, Space, Store};
+use nibbet_store::{Date, Space, Store};
 
 fn write(root: &Path, rel: &str, text: &str) {
     let path = root.join(rel);

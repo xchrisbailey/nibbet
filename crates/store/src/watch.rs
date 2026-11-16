@@ -16,7 +16,7 @@ use crate::{AttachmentOwner, Change, Date, Space};
 /// several events reaches the caller once. Well under the 1 s target.
 const DEBOUNCE: Duration = Duration::from_millis(50);
 
-/// What sett itself last did at a path, relative to the data root.
+/// What nibbet itself last did at a path, relative to the data root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mark {
     File(u64),
@@ -29,10 +29,10 @@ enum Mark {
     },
 }
 
-/// sett's own writes, so the watcher can tell them from outside changes.
+/// nibbet's own writes, so the watcher can tell them from outside changes.
 ///
 /// Matching on what is on disk now (rather than on timing) means duplicate or
-/// late events for sett's write are dropped, while an agent editing the same
+/// late events for nibbet's write are dropped, while an agent editing the same
 /// file afterwards is still reported because its content no longer matches.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct WriteLog(Arc<Mutex<HashMap<PathBuf, Mark>>>);
@@ -59,9 +59,9 @@ impl WriteLog {
         self.lock().insert(rel, Mark::Removed { was });
     }
 
-    /// Whether disk at `rel` is exactly what sett last left there. Anything
+    /// Whether disk at `rel` is exactly what nibbet last left there. Anything
     /// else is an outside change, and its mark is cleared so that a later
-    /// outside change back to sett's state is reported too.
+    /// outside change back to nibbet's state is reported too.
     fn is_own(&self, root: &Path, rel: &Path) -> bool {
         let mut log = self.lock();
         let path = root.join(rel);
@@ -117,7 +117,7 @@ impl Watcher {
 
         let (tx, events) = async_channel::unbounded();
         thread::Builder::new()
-            .name(format!("sett-watch-{}", space.dir_name()))
+            .name(format!("nibbet-watch-{}", space.dir_name()))
             .spawn(move || forward(raw_rx, tx, &root, space, &log))?;
         Ok(Watcher {
             _inner: inner,

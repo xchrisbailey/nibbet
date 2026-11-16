@@ -1,6 +1,6 @@
 use std::fs;
 
-use sett_store::{Date, JournalEntry, Space, Store};
+use nibbet_store::{Date, JournalEntry, Space, Store};
 
 fn date(s: &str) -> Date {
     Date::parse(s).unwrap()
@@ -8,7 +8,7 @@ fn date(s: &str) -> Date {
 
 fn new_store() -> (tempfile::TempDir, Store) {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path().join("sett")).unwrap();
+    let store = Store::open(dir.path().join("nibbet")).unwrap();
     (dir, store)
 }
 
@@ -78,7 +78,9 @@ fn new_task_lands_at_the_end_of_the_first_column() {
 #[test]
 fn saving_keeps_the_slug_and_unknown_frontmatter() {
     let (dir, store) = new_store();
-    let path = dir.path().join("sett/work/projects/inbox/tasks/deploy.md");
+    let path = dir
+        .path()
+        .join("nibbet/work/projects/inbox/tasks/deploy.md");
     fs::write(
         &path,
         "---\ntitle: Deploy\nowner: sam\ncolumn: Todo\norder: 1\ncreated: 2026-01-01\n---\nOld body\n",
@@ -98,7 +100,7 @@ fn saving_keeps_the_slug_and_unknown_frontmatter() {
     assert!(text.contains("owner: sam"), "{text}");
     assert!(
         !dir.path()
-            .join("sett/work/projects/inbox/tasks/deploy-to-prod.md")
+            .join("nibbet/work/projects/inbox/tasks/deploy-to-prod.md")
             .exists()
     );
 }
@@ -123,7 +125,7 @@ fn moving_a_task_into_the_last_column_marks_it_done() {
 fn journal_entry_is_only_written_when_saved() {
     let (dir, store) = new_store();
     let day = date("2026-03-04");
-    let path = dir.path().join("sett/personal/journal/2026-03-04.md");
+    let path = dir.path().join("nibbet/personal/journal/2026-03-04.md");
 
     let mut entry = JournalEntry::new(Space::Personal, day);
     assert!(!path.exists());
@@ -163,8 +165,11 @@ fn written_task_file_is_plain_frontmatter() {
     store
         .create_task(Space::Work, "inbox", "Ship it", date("2026-03-04"))
         .unwrap();
-    let text =
-        fs::read_to_string(dir.path().join("sett/work/projects/inbox/tasks/ship-it.md")).unwrap();
+    let text = fs::read_to_string(
+        dir.path()
+            .join("nibbet/work/projects/inbox/tasks/ship-it.md"),
+    )
+    .unwrap();
     assert_eq!(
         text,
         "---\ntitle: Ship it\ncolumn: Todo\norder: 1.0\ncreated: 2026-03-04\n---\n"

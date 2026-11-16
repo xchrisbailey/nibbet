@@ -5,8 +5,8 @@ use std::path::Path;
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext, Bounds, TestAppContext, WindowBounds, WindowOptions, px, size};
-use sett::{AppModel, Shell};
-use sett_store::{Settings, Space};
+use nibbet::{AppModel, Shell};
+use nibbet_store::{Settings, Space};
 
 fn copy_dir(from: &Path, to: &Path) {
     fs::create_dir_all(to).unwrap();
@@ -24,14 +24,14 @@ fn copy_dir(from: &Path, to: &Path) {
 #[gpui_kit::test]
 fn board_shows_its_cards_on_the_first_frame(cx: &mut TestAppContext) {
     let dir = tempfile::tempdir().unwrap();
-    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fixtures/sett");
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/fixtures/nibbet");
     let mut settings = Settings::defaults(dir.path());
     copy_dir(&fixtures, &settings.data_root);
     settings.last_space = Space::Work;
 
     cx.update(|cx| {
         gpui_kit::init(cx);
-        sett::init(cx);
+        nibbet::init(cx);
     });
     let (window, _shell) = cx.update(|cx| {
         let model = AppModel::open_unwatched(settings, None, cx).unwrap();

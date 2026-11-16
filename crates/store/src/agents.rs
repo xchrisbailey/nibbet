@@ -1,4 +1,4 @@
-//! Keeps the data root's `AGENTS.md` current. sett owns only the text between
+//! Keeps the data root's `AGENTS.md` current. nibbet owns only the text between
 //! the markers; anything else in the file belongs to the user.
 
 use std::fs;
@@ -13,8 +13,11 @@ const SHIPPED: [&str; 3] = [
     include_str!("agents_v2.md"),
     include_str!("agents_v3.md"),
 ];
-const BEGIN: &str = "<!-- sett:begin -->";
-const END: &str = "<!-- sett:end -->";
+const BEGIN: &str = "<!-- nibbet:begin -->";
+const END: &str = "<!-- nibbet:end -->";
+// The app was called sett, and its block carried these markers. Finding them
+// lets the block be swapped for the current one instead of kept beside it.
+const MARKERS: [(&str, &str); 2] = [(BEGIN, END), ("<!-- sett:begin -->", "<!-- sett:end -->")];
 
 fn block() -> String {
     format!("{BEGIN}\n{}\n{END}\n", BODY.trim_end())
@@ -29,9 +32,8 @@ fn updated(existing: &str) -> Option<String> {
         "\n"
     };
     let current = block().replace('\n', eol);
-    let next = match (existing.find(BEGIN), existing.find(END)) {
-        (Some(start), Some(end)) if start < end => {
-            let end = end + END.len();
+    let next = match marked_block(existing) {
+        Some((start, end)) => {
             // Swallow the line break after the end marker, which the block
             // itself carries, so repeated runs don't grow blank lines.
             let tail = &existing[end..];
@@ -52,6 +54,22 @@ fn updated(existing: &str) -> Option<String> {
         }
     };
     (next != existing).then_some(next)
+}
+
+/// Where the block sits, from its begin marker to just past its end marker.
+fn marked_block(text: &str) -> Option<(usize, usize)> {
+    MARKERS.iter().find_map(|(begin, end)| {
+        let start = text.find(begin)?;
+        let stop = text.find(end)?;
+        (start < stop).then(|| (start, stop + end.len()))
+    })
+}
+
+/// Whether `root` holds data the app wrote when it was called sett: its
+/// `AGENTS.md` carries sett's markers, or is a file sett shipped unmarked.
+pub(crate) fn written_by_sett(root: &Path) -> bool {
+    fs::read_to_string(root.join("AGENTS.md"))
+        .is_ok_and(|text| text.contains(MARKERS[1].0) || is_shipped(&text))
 }
 
 fn is_shipped(text: &str) -> bool {

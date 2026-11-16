@@ -11,8 +11,8 @@ use gpui_kit::{
     AppContext as _, InputEvent as _, Modifiers, ModifiersChangedEvent, MouseButton,
     TestAppContext, Window,
 };
-use sett::Selection;
-use sett_store::{Change, Date};
+use nibbet::Selection;
+use nibbet_store::{Change, Date};
 
 /// Opens the Note `plan` with `body`, next to a Note "Budget plan" with
 /// headings, a Task "Fix bug" and a Journal Entry.

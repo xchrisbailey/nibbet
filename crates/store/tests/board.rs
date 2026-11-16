@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use sett_store::{Board, Date, Space, Store, Task};
+use nibbet_store::{Board, Date, Space, Store, Task};
 
 fn date(s: &str) -> Date {
     Date::parse(s).unwrap()
@@ -9,7 +9,7 @@ fn date(s: &str) -> Date {
 
 fn new_store() -> (tempfile::TempDir, Store) {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path().join("sett")).unwrap();
+    let store = Store::open(dir.path().join("nibbet")).unwrap();
     (dir, store)
 }
 
@@ -17,8 +17,8 @@ fn tasks_dir(store: &Store) -> PathBuf {
     store.root().join("work/projects/inbox/tasks")
 }
 
-/// Writes a Task by hand in a form sett would never produce itself (a YAML
-/// comment, which a rewrite drops), so a test can tell whether sett rewrote it.
+/// Writes a Task by hand in a form nibbet would never produce itself (a YAML
+/// comment, which a rewrite drops), so a test can tell whether nibbet rewrote it.
 fn write_task(store: &Store, slug: &str, column: &str, order: f64, done: Option<&str>) {
     let done = done.map(|d| format!("done: {d}\n")).unwrap_or_default();
     let text = format!(
@@ -190,7 +190,7 @@ fn quick_added_task_goes_to_the_top_of_its_column() {
     );
 }
 
-fn inbox(store: &Store) -> sett_store::Project {
+fn inbox(store: &Store) -> nibbet_store::Project {
     store.project(Space::Work, "inbox").unwrap()
 }
 

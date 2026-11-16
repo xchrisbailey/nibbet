@@ -24,7 +24,7 @@ pub struct Task {
     /// Free-text Labels, already normalised when read; see [`normalize_labels`].
     pub labels: Vec<String>,
     pub body: String,
-    /// When the file was last written, by sett or anyone else. `None` for a
+    /// When the file was last written, by nibbet or anyone else. `None` for a
     /// file whose time can't be read.
     pub modified: Option<SystemTime>,
     /// Every frontmatter key as last read or written, so unknown keys survive
@@ -41,7 +41,7 @@ impl Task {
         self
     }
 
-    /// Whether the file's frontmatter couldn't be read. sett never writes such
+    /// Whether the file's frontmatter couldn't be read. nibbet never writes such
     /// a file, so it must be fixed in another editor.
     pub fn frontmatter_error(&self) -> bool {
         self.unreadable.is_some()
@@ -163,7 +163,7 @@ pub fn same_label(a: &str, b: &str) -> bool {
 
 /// Trims each Label, drops empty ones and later duplicates that match ignoring
 /// case. The first spelling wins and the order is kept, so hand-edited files
-/// and sett agree on what a Task's Labels are.
+/// and nibbet agree on what a Task's Labels are.
 pub fn normalize_labels<S: AsRef<str>>(labels: &[S]) -> Vec<String> {
     let mut kept: Vec<String> = Vec::new();
     for label in labels.iter().map(|l| l.as_ref().trim()) {
@@ -209,7 +209,7 @@ pub struct Note {
     pub title: String,
     pub created: Option<Date>,
     pub body: String,
-    /// When the file was last written, by sett or anyone else. `None` for a
+    /// When the file was last written, by nibbet or anyone else. `None` for a
     /// file whose time can't be read.
     pub modified: Option<SystemTime>,
     /// Every frontmatter key as last read or written, so unknown keys survive
@@ -226,7 +226,7 @@ impl Note {
         self
     }
 
-    /// Whether the file's frontmatter couldn't be read. sett never writes such
+    /// Whether the file's frontmatter couldn't be read. nibbet never writes such
     /// a file, so it must be fixed in another editor.
     pub fn frontmatter_error(&self) -> bool {
         self.unreadable.is_some()
@@ -264,7 +264,7 @@ pub struct JournalEntry {
     pub space: Space,
     pub date: Date,
     pub body: String,
-    /// When the file was last written, by sett or anyone else. `None` for an
+    /// When the file was last written, by nibbet or anyone else. `None` for an
     /// entry without a file, or one whose time can't be read.
     pub modified: Option<SystemTime>,
     /// Every frontmatter key as last read or written, so unknown keys survive
@@ -281,7 +281,7 @@ impl JournalEntry {
         self
     }
 
-    /// Whether the file's frontmatter couldn't be read. sett never writes such
+    /// Whether the file's frontmatter couldn't be read. nibbet never writes such
     /// a file, so it must be fixed in another editor.
     pub fn frontmatter_error(&self) -> bool {
         self.unreadable.is_some()
@@ -338,7 +338,7 @@ pub struct Template {
 }
 
 impl Template {
-    /// Whether the file's frontmatter couldn't be read. sett never writes such
+    /// Whether the file's frontmatter couldn't be read. nibbet never writes such
     /// a file, so it must be fixed in another editor.
     pub fn frontmatter_error(&self) -> bool {
         self.unreadable.is_some()

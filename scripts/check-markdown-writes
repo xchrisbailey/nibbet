@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sett writes Markdown links and images into Items' files. A destination with a
+# nibbet writes Markdown links and images into Items' files. A destination with a
 # space or a bracket breaks the link unless it goes through the fork's
 # `markdown_editor::markdown_destination` (and alt text through its escaping).
 # So every line in the app or store that builds `](` with format!/write!/

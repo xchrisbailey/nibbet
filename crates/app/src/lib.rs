@@ -1,5 +1,5 @@
-//! The sett desktop app: the window shell, the left nav and the center panel,
-//! built on `sett-store`.
+//! The nibbet desktop app: the window shell, the left nav and the center panel,
+//! built on `nibbet-store`.
 
 mod app_model;
 mod attach;

@@ -58,7 +58,7 @@ pub type ImageDisplayFn = dyn Fn(&str) -> ImageDisplay + Send + Sync;
 pub type LinkDecorationFn = dyn Fn(&str) -> LinkDecoration + Send + Sync;
 
 pub(crate) const IMAGE_PLACEHOLDER: &str = "image-placeholder";
-pub(crate) const ATTACHMENT_ICON: &str = "sett-attachment-icon";
+pub(crate) const ATTACHMENT_ICON: &str = "nibbet-attachment-icon";
 
 const ICON_IMAGE_OFF: &[u8] = include_bytes!("../assets/icons/image-off.svg");
 const ICON_GLOBE: &[u8] = include_bytes!("../assets/icons/globe.svg");

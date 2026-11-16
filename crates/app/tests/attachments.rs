@@ -1,5 +1,5 @@
 //! UI integration tests for Attachments in an Item's body: images show or get
-//! a chip, links to files open, and changes made outside sett show up.
+//! a chip, links to files open, and changes made outside nibbet show up.
 
 mod common;
 
@@ -15,8 +15,8 @@ use gpui_kit::{
     AppContext as _, InputEvent as _, Modifiers, ModifiersChangedEvent, MouseButton,
     TestAppContext, Window,
 };
-use sett::{AppModel, AttachmentOpener, Selection};
-use sett_store::{AttachmentOwner, Change};
+use nibbet::{AppModel, AttachmentOpener, Selection};
+use nibbet_store::{AttachmentOwner, Change};
 
 fn open_plan(cx: &mut TestAppContext, body: &str) -> Fixture {
     let f = open_shell(cx);
@@ -209,7 +209,7 @@ fn cmd_click_on_a_path_outside_the_space_does_nothing(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn a_file_added_outside_sett_replaces_the_missing_chip(cx: &mut TestAppContext) {
+fn a_file_added_outside_nibbet_replaces_the_missing_chip(cx: &mut TestAppContext) {
     let f = open_plan(cx, "![late](plan/late.png)\n");
     assert!(has_label(cx, &f, "Missing image: late.png"));
 

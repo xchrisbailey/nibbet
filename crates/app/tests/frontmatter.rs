@@ -1,5 +1,5 @@
 //! UI integration tests for Items and Projects whose frontmatter can't be
-//! read: sett shows a notice and never writes them (ADR 0001).
+//! read: nibbet shows a notice and never writes them (ADR 0001).
 
 mod common;
 
@@ -10,8 +10,8 @@ use std::time::Duration;
 use common::{Fixture, open_shell};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, TestAppContext};
-use sett::Selection;
-use sett_store::Change;
+use nibbet::Selection;
+use nibbet_store::Change;
 
 const BROKEN: &str = "---\ntitle: A\ntitle: B\n---\nBody\n";
 

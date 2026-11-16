@@ -1,4 +1,4 @@
-# sett
+# nibbet
 
 A local-first personal management app for solo developers, built so AI agents can read and work on the same data the user does.
 

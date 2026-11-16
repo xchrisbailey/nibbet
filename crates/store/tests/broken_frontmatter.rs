@@ -1,10 +1,10 @@
-//! A file whose frontmatter can't be read is never written by sett (ADR 0001:
+//! A file whose frontmatter can't be read is never written by nibbet (ADR 0001:
 //! tolerate hand edits, never "fix" the file).
 
 use std::fs;
 use std::path::PathBuf;
 
-use sett_store::{Date, Space, Store};
+use nibbet_store::{Date, Space, Store};
 
 const DUPLICATE_KEY: &str = "---\ntitle: A\ntitle: B\nowner: sam\n---\nBody\n";
 const NOT_A_MAPPING: &str = "---\n- just\n- a list\n---\nBody\n";
@@ -15,7 +15,7 @@ fn date(s: &str) -> Date {
 
 fn new_store() -> (tempfile::TempDir, Store) {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path().join("sett")).unwrap();
+    let store = Store::open(dir.path().join("nibbet")).unwrap();
     (dir, store)
 }
 
@@ -135,7 +135,7 @@ fn moving_skips_or_refuses_broken_tasks() {
     let broken_path = write(&store, "work/projects/inbox/tasks/broken.md", broken);
     let project = store.project(Space::Work, "inbox").unwrap();
     let tasks = store.tasks(Space::Work, "inbox");
-    let board = sett_store::Board::new(&project.columns, &tasks);
+    let board = nibbet_store::Board::new(&project.columns, &tasks);
 
     assert!(
         store

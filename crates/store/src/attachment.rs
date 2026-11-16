@@ -232,7 +232,7 @@ impl Store {
         if write {
             let path = folder.join(&name);
             // Hidden temp then rename, so the watcher never sees a half file.
-            let tmp = folder.join(format!(".{name}.sett-tmp"));
+            let tmp = folder.join(format!(".{name}.nibbet-tmp"));
             fs::write(&tmp, bytes)?;
             self.log.file(self.rel(&path), bytes);
             fs::rename(&tmp, &path)?;
@@ -329,7 +329,7 @@ static TEMP: AtomicU32 = AtomicU32::new(0);
 /// and the caller then keeps the original.
 fn convert_to_jpeg(source: &Path) -> Option<Vec<u8>> {
     let tmp = std::env::temp_dir().join(format!(
-        "sett-convert-{}-{}.jpg",
+        "nibbet-convert-{}-{}.jpg",
         std::process::id(),
         TEMP.fetch_add(1, Ordering::Relaxed)
     ));

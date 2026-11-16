@@ -2,13 +2,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use sett_store::{AttachmentOwner, Date, Resolved, Space, Store, is_inline_image};
+use nibbet_store::{AttachmentOwner, Date, Resolved, Space, Store, is_inline_image};
 
 const SPACE: Space = Space::Work;
 
 fn new_store() -> (tempfile::TempDir, Store, Arc<Mutex<Vec<PathBuf>>>) {
     let dir = tempfile::tempdir().unwrap();
-    let mut store = Store::open(dir.path().join("sett")).unwrap();
+    let mut store = Store::open(dir.path().join("nibbet")).unwrap();
     let trashed = Arc::new(Mutex::new(Vec::new()));
     let log = trashed.clone();
     store.set_trash(move |path| {
@@ -327,7 +327,7 @@ fn trashing_an_item_takes_its_folder_too() {
         .unwrap();
     let in_note = store.create_note(SPACE, None, "Meeting", today).unwrap();
     let template = store.create_template(SPACE, "Bug").unwrap();
-    let mut entry = sett_store::JournalEntry::new(SPACE, today);
+    let mut entry = nibbet_store::JournalEntry::new(SPACE, today);
     entry.body = "hi".into();
     store.save_journal_entry(&mut entry).unwrap();
 

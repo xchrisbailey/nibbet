@@ -11,8 +11,8 @@ use std::time::Duration;
 use common::{Fixture, click_label, open_shell};
 use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{AppContext as _, TestAppContext};
-use sett::Selection;
-use sett_store::Change;
+use nibbet::Selection;
+use nibbet_store::Change;
 
 /// Longer than the autosave delay.
 const AFTER_AUTOSAVE: Duration = Duration::from_secs(2);

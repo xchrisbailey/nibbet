@@ -4,6 +4,6 @@ Every Note, Task and Journal Entry is its own Markdown file with YAML frontmatte
 
 ## Consequences
 
-- sett must watch the data folder and reconcile changes made outside the app.
-- Structured fields live only in frontmatter, so sett has to tolerate frontmatter that is hand-edited or missing.
+- nibbet must watch the data folder and reconcile changes made outside the app.
+- Structured fields live only in frontmatter, so nibbet has to tolerate frontmatter that is hand-edited or missing.
 - One file per Task means moving a card changes one line in one file, which keeps git diffs clean and avoids conflicting writes to a shared board file.

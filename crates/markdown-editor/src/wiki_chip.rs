@@ -101,7 +101,7 @@ impl ChipKey {
 }
 
 /// The name of the chip's inline plugin.
-pub(crate) const CHIP_NODE: &str = "sett-wiki-chip";
+pub(crate) const CHIP_NODE: &str = "nibbet-wiki-chip";
 
 /// The chip object for the Link `source` (`[[slug]]`). Its fallback text and
 /// accessibility label are the source.

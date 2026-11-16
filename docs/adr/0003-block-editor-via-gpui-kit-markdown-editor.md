@@ -10,6 +10,6 @@ The spike (#2) found that the published 0.2.0 doesn't build against gpui-kit 0.9
 
 ## Consequences
 
-- sett writes an Item's file only after the user has actually edited it. Opening or viewing an Item never saves it, because the editor still normalises some Markdown on save.
+- nibbet writes an Item's file only after the user has actually edited it. Opening or viewing an Item never saves it, because the editor still normalises some Markdown on save.
 - `[[wiki-links]]` show as plain text in the block view. Making them clickable is a later upstream contribution.
 - We maintain the fork until our patches are merged upstream.

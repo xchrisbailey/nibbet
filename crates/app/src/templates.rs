@@ -14,14 +14,14 @@ use gpui_kit::{
     SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _,
     Window, actions, div, prelude::FluentBuilder as _, rems,
 };
-use sett_store::Template;
+use nibbet_store::Template;
 
 use crate::app_model::AppModel;
 use crate::confirm_delete::{TEMPLATE_CONSEQUENCE, confirm_delete};
 use crate::item_editor::{EditorTarget, ItemEditor, UNTITLED_TEMPLATE};
 use crate::split;
 
-actions!(sett, [OpenTemplate]);
+actions!(nibbet, [OpenTemplate]);
 
 const ROW_CONTEXT: &str = "TemplateRow";
 

@@ -1,9 +1,9 @@
-use sett_store::{Space, Store};
+use nibbet_store::{Space, Store};
 
 #[test]
 fn first_run_creates_both_spaces_with_an_inbox_and_agents_md() {
     let dir = tempfile::tempdir().unwrap();
-    let root = dir.path().join("sett");
+    let root = dir.path().join("nibbet");
 
     let store = Store::open(&root).unwrap();
 
@@ -29,7 +29,7 @@ fn existing_data_root_is_left_alone() {
 
     let store = Store::open(root).unwrap();
 
-    // sett appends its marked block but keeps the user's text.
+    // nibbet appends its marked block but keeps the user's text.
     assert!(
         std::fs::read_to_string(root.join("AGENTS.md"))
             .unwrap()

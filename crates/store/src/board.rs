@@ -7,7 +7,7 @@ pub const MIN_COLUMNS: usize = 2;
 
 /// A Project's Tasks laid out in its Columns, in Board order. A Task whose
 /// `column` is missing or names no Column (a hand edit, or a Column renamed
-/// outside sett) shows at the end of the first Column so it can't vanish.
+/// outside nibbet) shows at the end of the first Column so it can't vanish.
 #[derive(Debug)]
 pub struct Board<'a> {
     names: &'a [String],
@@ -83,7 +83,7 @@ impl<'a> Board<'a> {
     /// there is no room left between them (or a neighbour has no `order`),
     /// the whole Column is renumbered `1, 2, 3, …`, skipping Tasks whose order
     /// already matches. Tasks whose frontmatter can't be read are left out of
-    /// a renumber since sett never writes them. Empty when the Task wouldn't
+    /// a renumber since nibbet never writes them. Empty when the Task wouldn't
     /// move. `None` when the Task or Column doesn't exist.
     pub(crate) fn plan_move(
         &self,

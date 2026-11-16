@@ -9,7 +9,7 @@ use std::path::Path;
 use common::{Fixture, center_title, click_label, find_label, open_shell};
 use gpui_kit::test::{TestQueryExt, TestWindowExt};
 use gpui_kit::{AppContext as _, TestAppContext, Window};
-use sett_store::{Change, Settings, Space};
+use nibbet_store::{Change, Settings, Space};
 
 fn is_selected(window: &mut Window, scope: Option<&'static str>, label: &str) -> bool {
     find_label(window, scope, label).selected() == Some(true)

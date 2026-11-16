@@ -5,7 +5,7 @@ mod common;
 use common::{note, open_shell_sized, settle, write};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Pixels, TestAppContext, px};
-use sett::Selection;
+use nibbet::Selection;
 
 /// The Budget Note from the screenshot fixtures. The Link chip opens the
 /// paragraph after the table, so its top tracks the table's bottom.
@@ -62,14 +62,14 @@ fn open_budget_in_project(cx: &mut TestAppContext, width: f32) -> common::Fixtur
         &f,
         "projects/kitchen-reno/project.md",
         "---\nname: Kitchen reno\ncolumns: [Quotes]\n---\n",
-        sett_store::Change::Project("kitchen-reno".into()),
+        nibbet_store::Change::Project("kitchen-reno".into()),
     );
     write(
         cx,
         &f,
         "projects/kitchen-reno/tasks/get-three-quotes.md",
         "---\ntitle: Get three quotes\ncolumn: Quotes\n---\n",
-        sett_store::Change::Task {
+        nibbet_store::Change::Task {
             project: "kitchen-reno".into(),
             slug: "get-three-quotes".into(),
         },
@@ -82,7 +82,7 @@ fn open_budget_in_project(cx: &mut TestAppContext, width: f32) -> common::Fixtur
         note(Some("kitchen-reno"), "budget"),
     );
     let model = f.model(cx);
-    let item = sett_store::ItemId::Note {
+    let item = nibbet_store::ItemId::Note {
         project: Some("kitchen-reno".into()),
         slug: "budget".into(),
     };

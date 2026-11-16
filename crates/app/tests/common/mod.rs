@@ -11,8 +11,8 @@ use gpui_kit::{
     AnyWindowHandle, AppContext, Bounds, ElementId, Entity, MouseButton, TestAppContext, Window,
     WindowBounds, WindowOptions, px, size,
 };
-use sett::{AppModel, Shell};
-use sett_store::{Change, Settings};
+use nibbet::{AppModel, Shell};
+use nibbet_store::{Change, Settings};
 
 pub struct Fixture {
     _dir: tempfile::TempDir,
@@ -40,7 +40,7 @@ pub fn open_shell_sized(cx: &mut TestAppContext, width: f32, height: f32) -> Fix
     let data_root = settings.data_root.clone();
     cx.update(|cx| {
         gpui_kit::init(cx);
-        sett::init(cx);
+        nibbet::init(cx);
     });
     let (window, shell) = cx.update(|cx| {
         let model = AppModel::open_unwatched(settings, Some(settings_path.clone()), cx).unwrap();

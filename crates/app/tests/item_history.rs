@@ -8,8 +8,8 @@ use std::fs;
 use common::{Fixture, center_title, input, note, open_shell, press, write};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, TestAppContext};
-use sett::Selection;
-use sett_store::{Change, LinkTarget};
+use nibbet::Selection;
+use nibbet_store::{Change, LinkTarget};
 
 const BACK: &str = "cmd-[";
 const FORWARD: &str = "cmd-]";

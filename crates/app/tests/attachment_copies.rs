@@ -1,5 +1,5 @@
 //! UI integration tests for Attachments that follow content moving around
-//! inside sett: copy and paste between Items, and using a Template.
+//! inside nibbet: copy and paste between Items, and using a Template.
 
 mod common;
 
@@ -10,8 +10,8 @@ use std::time::Duration;
 use common::{Fixture, has_label, input, open_shell, press, write};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext};
-use sett::Selection;
-use sett_store::Change;
+use nibbet::Selection;
+use nibbet_store::Change;
 
 /// Longer than the autosave delay.
 const AFTER_AUTOSAVE: Duration = Duration::from_secs(2);
@@ -159,9 +159,9 @@ fn pasting_back_into_the_same_item_changes_nothing(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn text_from_outside_sett_is_pasted_as_it_is(cx: &mut TestAppContext) {
+fn text_from_outside_nibbet_is_pasted_as_it_is(cx: &mut TestAppContext) {
     let f = two_notes(cx);
-    // Another Item's folder name in text that sett never copied.
+    // Another Item's folder name in text that nibbet never copied.
     copy_all(cx, &f);
     open(cx, &f, "other");
     cx.write_to_clipboard(ClipboardItem::new_string(

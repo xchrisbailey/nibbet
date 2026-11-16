@@ -8,8 +8,8 @@ use gpui_kit::{
     AnyWindowHandle, AppContext, Bounds, Entity, TestAppContext, WindowBounds, WindowOptions, px,
     size,
 };
-use sett::{AppModel, Shell};
-use sett_store::{Change, Settings};
+use nibbet::{AppModel, Shell};
+use nibbet_store::{Change, Settings};
 
 mod common;
 use common::find_card;
@@ -31,7 +31,7 @@ fn open_board(cx: &mut TestAppContext, tasks: &[(&str, &str)]) -> Fixture {
     // through the AppModel first and add the Tasks afterwards.
     cx.update(|cx| {
         gpui_kit::init(cx);
-        sett::init(cx);
+        nibbet::init(cx);
     });
     let model = cx.update(|cx| AppModel::open_unwatched(settings, None, cx).unwrap());
     fs::create_dir_all(&tasks_dir).unwrap();

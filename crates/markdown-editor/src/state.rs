@@ -338,7 +338,7 @@ pub(crate) const BLOCKS_COPY_TAG: &str = "gpui-kit/block-editor/blocks-markdown/
 
 /// FORK: clipboard metadata for a copy from inside one Code Block. The
 /// plain text is the raw code; the tag carries the block's `lang` and `meta`
-/// (`<tag>\n<lang>\n<meta>`) so a paste back into sett can rebuild the block.
+/// (`<tag>\n<lang>\n<meta>`) so a paste back into nibbet can rebuild the block.
 pub(crate) const CODE_COPY_TAG: &str = "gpui-kit/block-editor/code/v1";
 
 /// What the clipboard item says about where it came from.

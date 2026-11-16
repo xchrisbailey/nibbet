@@ -10,8 +10,8 @@ use gpui_kit::{
     AnyWindowHandle, AppContext, Bounds, Entity, TestAppContext, WindowBounds, WindowOptions, px,
     size,
 };
-use sett::{AppModel, Shell};
-use sett_store::{Change, Settings};
+use nibbet::{AppModel, Shell};
+use nibbet_store::{Change, Settings};
 
 struct Fixture {
     _dir: tempfile::TempDir,
@@ -30,7 +30,7 @@ fn open_board(cx: &mut TestAppContext, tasks: &[(&str, &str, f64, Option<String>
     // through the AppModel first and add the Tasks afterwards.
     cx.update(|cx| {
         gpui_kit::init(cx);
-        sett::init(cx);
+        nibbet::init(cx);
     });
     let model = cx.update(|cx| AppModel::open_unwatched(settings, None, cx).unwrap());
     fs::create_dir_all(&tasks_dir).unwrap();
@@ -64,7 +64,7 @@ fn open_board(cx: &mut TestAppContext, tasks: &[(&str, &str, f64, Option<String>
     }
 }
 
-/// A YAML comment never survives a rewrite by sett, so it marks a file as
+/// A YAML comment never survives a rewrite by nibbet, so it marks a file as
 /// untouched.
 fn write_task(dir: &Path, slug: &str, column: &str, order: f64, done: Option<&str>) {
     let done = done.map(|d| format!("done: {d}\n")).unwrap_or_default();

@@ -1,10 +1,10 @@
 use std::fs;
 
-use sett_store::{Date, ItemId, LinkTarget, Space, SpaceIndex, Store};
+use nibbet_store::{Date, ItemId, LinkTarget, Space, SpaceIndex, Store};
 
 fn new_store() -> (tempfile::TempDir, Store) {
     let dir = tempfile::tempdir().unwrap();
-    let mut store = Store::open(dir.path().join("sett")).unwrap();
+    let mut store = Store::open(dir.path().join("nibbet")).unwrap();
     store.set_trash(|path| fs::remove_file(path));
     (dir, store)
 }
